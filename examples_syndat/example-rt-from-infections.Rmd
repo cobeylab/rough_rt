@@ -1,0 +1,81 @@
+---
+title: "Analyze synthetic data and generate plots"
+output: html_notebook
+---
+
+
+```{r}
+## Preamble
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE)
+parlist <- read_rds('true_pars.rds')
+source('../code/util.R')
+source('../code/cori.R')
+if(!dir.exists('figs')){dir.create('figs')}
+```
+
+## Extract SEIR simulation and plot.
+
+- Incidence here is observed at time of infection (S -> E).
+- SEIR simulation is deterministic
+
+```{r}
+get_sim_df() %>%
+    filter(time < 300) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+    geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ggtitle('Epidemic curve') -> inc
+
+get_sim_df() %>% 
+  filter(time < 300) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
+
+cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
+```
+
+
+# Fig. 2 - estimate Rt in real time using three different methods, assuming perfect observation at the moment of infection.
+
+## Truncate the synthetic data to a maximum time of observation
+
+```{r}
+mt <- 150
+rtdf <- get_sim_df() %>% filter(time <= mt)
+```
+
+
+## Use the method of Cori et al. and of Wallinga & Teunis from EpiEstim to estimate Rt.
+```{r}
+wdw <- 1 ## Set smoothing window = 1d
+
+plot_df_rt <- rtdf %>%
+  merge(get_cori(rtdf, 
+                 icol_name = 'incidence', 
+                 window = wdw), 
+        by = 'time') 
+```
+
+## Plot Figure 2
+```{r}
+plot_df_rt %>%
+  ggplot() +
+  geom_line(aes(x = time, y = true_rt), lwd = 1)+
+  geom_line(aes(x = time, y = Cori.mean), color = 'dodgerblue', lty = 2) +
+  geom_ribbon(aes(x = time, ymin = Cori.025, ymax = Cori.975), fill= 'dodgerblue',  alpha = 0.3)+
+  xlab('time') +
+  ylab(expression(paste(R[t]))) 
+```
+
