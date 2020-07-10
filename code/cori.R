@@ -30,7 +30,7 @@ get_cori <- function(df.in,
   
   idat <- df.in %>%
     #filter(get(obs_col_name) > 0 & !is.na(get(obs_col_name))) %>%
-    complete(time = 2:max(df.in$time)) %>%
+    tidyr::complete(time = 2:max(df.in$time)) %>%
     mutate_all(.funs = function(xx){ifelse(is.na(xx), 0, xx)}) %>%
     arrange(time)
   
@@ -45,10 +45,10 @@ get_cori <- function(df.in,
   ts <- ts[ts > st.time & ts <= (ed.time-window)]
   te <- ts+(window-1)
   
-  estimate_R(
+  EpiEstim::estimate_R(
     incid = pull(idat, shifted_obs),
     method = "uncertain_si",
-    config = make_config(
+    config = EpiEstim::make_config(
       list(
         mean_si = SI_mean,
         min_mean_si = SI_mean -1,

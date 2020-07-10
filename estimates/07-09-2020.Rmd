@@ -36,15 +36,19 @@ dat %>%
 
 ## Estimate Rt by region
 ```{r}
+## Input rr is the name of a restore region
 rt_by_region <- function(rr){
-  
+  ## Subset and reformat the data frame
   ins <- filter(dat, restore_region == rr) %>% 
     arrange(date) %>%
-    mutate(time = 1:nrow(.))
+    mutate(time = 1:nrow(.)) # Create a numeric time column
   
+  ## Calculate the appropriate window size
+  ##   This is kind of arbitrary, but it scales with the 20th percentile of daily sample size
   ww = floor(50/max(1, quantile(filter(ins, new_deaths>0)$new_deaths, .2)))
   cat(sprintf('\nregion is %s, window is %.0f\n', rr, ww))
   
+  ## Estimate Rt and merge with the original data frame for the region
   merge(
     ins,
     get_cori(ins, 
@@ -57,22 +61,26 @@ rt_by_region <- function(rr){
              wend = F),
     by = 'time'
   ) %>%
-    select(-time) %>%
-    mutate(window = ww)
+    select(-time) %>% ## Drop the arbitrary time vector
+    mutate(window = ww) ## Create a column to record the window size
 }
+```
 
+## Run function for each region to estimate Rt
+```{r}
 regional_estimates <-
   bind_rows(
     lapply(unique(dat$restore_region), FUN = rt_by_region)
   )
 ```
 
-## Plot
+## Plot regional estimates
 ```{r}
 regional_estimates %>%
   ggplot()+
   geom_line(aes(x = date, y = rt.mean, color = window))+
   geom_ribbon(aes(x = date, ymin = rt.025, ymax = rt.975), alpha = .3)+
+  geom_hline(aes(yintercept = 1))+
   facet_wrap(.~restore_region) +
   ylab('Rt') +
   scale_color_viridis_c() +
@@ -83,17 +91,21 @@ ggsave(width = 7, height = 5, filename = sprintf('../figs/%s-regional_rt_from_id
 
 ## Estimate Rt overall
 ```{r}
-rt_overall <- function(dat){
+rt_overall <- function(dat, 
+                       obs_colname = 'new_deaths'){
   
+  ## Group the data by date and get the total new deaths in any region
   ins <- dat %>%
     group_by(date) %>%
     summarise(new_deaths = sum(new_deaths)) %>%
     arrange(date) %>%
-    mutate(time = 1:nrow(.))
+    mutate(time = 1:nrow(.)) ## Add numeric time column
   
+  ## Calculate the window size
   ww = floor(50/max(1, quantile(filter(ins, new_deaths>0)$new_deaths, .2)))
   cat(sprintf('\noverall window is %.0f\n', ww))
   
+  ## Estimate Rt and mrege with the cleaned input data frame
   merge(
     ins,
     get_cori(ins, 
@@ -109,7 +121,10 @@ rt_overall <- function(dat){
     select(-time) %>%
     mutate(window = ww)
 }
+```
 
+## Estimate Rt overall
+```{r}
 overall_estimates <- rt_overall(dat)
 ```
 
@@ -123,7 +138,163 @@ overall_estimates %>%
   scale_color_viridis_c() +
   geom_vline(aes(xintercept = as.Date(max(dat$date))), lty = 2)+
   xlim(c(as.Date(min(dat$date)), as.Date(max(dat$date)))) +
-  ggtitle('Illinois overall')
+  ggtitle('Illinois overall')+
+  geom_hline(aes(yintercept = 1))
 ggsave(width = 4, height = 3, filename = sprintf('../figs/%s-Illinois_rt_from_idph_deaths.png', Sys.Date()), dpi = 300)
+```
+****
+
+# Bootstrap total infections from observations
+
+* Then use total infections to estimate Rt
+
+## Function to estimate total infections given a fixed probability of observation
+```{r}
+est_total_inf <- function(df, ## Data frame containing a column with daily observations
+                          p_obs, ## Probability of observing an infection. Assume fixed over time.
+                          obs_colname, ## Name of the column holding the observations
+                          n_replicates = 1) ## Number of times to resample total infections 
+  {
+  draw_one_sample <- function(k, p){
+    # Given known k (number of observations), and p (probability of observation)
+    #  the best estimates of n is k/p
+    #  --> Create a vector of possible n values centered around k/p
+    possible_n_vec = seq(round(k/p*.1), round(k/p*3), by = 1)
+    # Get the binomial probability of observing k deaths given n total infections
+    lk_n_given_k_p = sapply(possible_n_vec, FUN = function(nn) dbinom(x = k, size = nn, prob = p))
+    # Normalize 
+    normalized_lk_n_given_k_p = lk_n_given_k_p/sum(lk_n_given_k_p)
+    # plot(possible_n_vec, normalized_lk_n_given_k_p)
+    # Draw a sample with weights given by normalized_lk...
+    sample(x = possible_n_vec, size = 1, replace = T, prob = normalized_lk_n_given_k_p)
+  }
+  
+  ## For each entry in the observations column, upscale
+  infection_samples = replicate(n = n_replicates, expr = sapply(pull(df, obs_colname), FUN = function(kk) draw_one_sample(kk, p_obs)))
+  colnames(infection_samples) = paste0('infections.', 1:n_replicates)
+  bind_cols(df, as.data.frame(infection_samples))
+}
+```
+
+##  Example -- draw one time series of infection
+
+* red shows estimated infections
+* blue shows observations
+
+```{r}
+## Get an aggregate time series of observations for the whole state
+all_IL <- dat %>% group_by(date) %>% summarise(new_deaths = sum(new_deaths))
+## Estimate total infections from observations
+est_total_inf(all_IL, 
+              p_obs = .5, 
+              obs_colname = 'new_deaths',
+              n_replicates = 1) %>%
+  pivot_longer(-date) %>%
+  ggplot()+
+  geom_line(aes(x = date, y = value, color = name))+
+  ggtitle('p = .5')
+```
+
+## Example -- bootstrap many time series of infections
+
+* red shows estimated infections
+* blue shows observations
+
+```{r}
+## Example -- bootstrap many time series of infections from observations
+est_total_inf(all_IL, 
+              p_obs = .1, 
+              obs_colname = 'new_deaths', 
+              n_replicates = 50) %>%
+  pivot_longer(-date) %>%
+  mutate(is.observed = !grepl('infection', name)) %>%
+  ggplot() +
+  geom_line(aes(x = date, y = value, group = name, color = is.observed), alpha = .5)+
+  geom_hline(aes(yintercept = 1))
+```
+## Wrapper to feed resampled time series of observations into Rt estimator
+```{r}
+overall_rt_boot_wrapper <- function(
+ dat,
+ obs_colname,
+ p_obs,
+ mean_delay,
+ n_replicates
+){
+  
+  ## Rename the observations column for ease of manipulation
+  dat <- rename(dat, observations = eval(obs_colname))
+  
+  ## Calculate the window size
+  low_inf_count = filter(dat, observations>0) %>%
+    pull(observations) %>%
+    quantile(.2) %>%
+    round()
+  ww = floor(50/low_inf_count)
+  cat(sprintf('\noverall window is %.0f\n', ww))
+  
+  ## Estimate total infections from observations
+  infection_ests <- est_total_inf(df = dat, obs_colname = 'observations', p_obs = p_obs, n_replicates = n_replicates)
+  
+
+  
+  ## Estimate Rt and mrege with the cleaned input data frame
+  library(doParallel)
+  cl <- makeCluster(parallel::detectCores()-1)
+  registerDoParallel(cl)
+  est_list <- foreach(inf_col= paste0('infections.', 1:n_replicates),
+                      .packages = 'dplyr','EpiEstim', 'tidyr', 
+                      .export = c('get_cori', 'na_to_0')) %dopar% {
+                          ins = infection_ests %>% 
+                            select(date, eval(inf_col)) %>%
+                            mutate(time = 1:nrow(.))
+                   
+                            get_cori(ins, 
+                              obs_col_name = inf_col, 
+                              window = ww, 
+                              out_name = 'rt',
+                              mean_delay = mean_delay, 
+                              SI_mean = 4.5, ## Rough estimates from Ganyani et al
+                              SI_var = 1.7,   
+                              wend = F) %>%
+                            merge(select(ins, time, date), by = 'time') %>%
+                            select(-time)
+  }
+  stopCluster(cl)
+  
+  ## For each date, get the median of means, the lower .025 of lower bounds and the upper .975 of upper bounds
+  summarized_ests <-  bind_rows(est_list, .id = 'replicate') %>%
+    group_by(date) %>%
+    ## PHIL - for each replicate, we get a mean, upper and lower CI rt estimate.
+    ##    I'm not sure what the best way to aggregate is.
+    ##    Here I'm taking the median of means, the lower bound of lower bounds and the upper bound of upper bounds.
+    summarise(rt.mean = median(rt.mean, na.rm = TRUE),
+              rt.lower = quantile(rt.025, probs = .025, na.rm = TRUE),
+              rt.upper = quantile(rt.975, probs = 0.975, na.rm = TRUE))
+  
+  return(summarized_ests)
+  
+}
+
+
+```
+
+
+## Test bootstrap
+```{r}
+test_overall_bootstrap <- overall_rt_boot_wrapper(dat = all_IL, 
+                        obs_colname = 'new_deaths', 
+                        p_obs = .8, 
+                        mean_delay = 20, 
+                        n_replicates = 50)
+```
+
+```{r}
+test_overall_bootstrap %>%
+  ggplot()+
+  geom_line(aes(x = date, y = rt.mean))+
+  geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), alpha = .3)+
+  geom_hline(aes(yintercept = 1))+
+  ylab('Rt')
 ```
 
