@@ -111,3 +111,8 @@ delays %>%
   theme_bw()
 ```
 
+## Save the posterior
+```{r}
+write_rds(params, 'delay_collection_to_death_posterior.rds')
+```
+

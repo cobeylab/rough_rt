@@ -1,0 +1,177 @@
+---
+title: "Fit gamma-distributed del_sample_to_death from sample collection to death"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(rstan)
+```
+
+
+## Import data from Northshore CIVIS
+
+```{r}
+## Load observed delays from sample to death
+obs_delay <- read_csv('../collection_to_death_NS.csv') 
+nn <- sum(obs_delay$count)
+
+del_sample_to_death <- rep(obs_delay$wait, obs_delay$count) + runif(nn) - runif(nn)
+
+## Generate synthetic incubation times
+del_inf_to_onset <- rgamma(n = nn, shape = 5.807, scale = 0.948) # From Lauer et al. 2020
+
+## Generate synthetic delays from symptom onset to sample collection
+del_onset_to_sample <- rgamma(n = nn, shape = 2.5, scale = 1.25)
+
+delay_vec <- del_inf_to_onset + del_onset_to_sample + del_sample_to_death
+```
+## Fit gamma distribution
+```{r}
+sprintf('mean delay from infection to death is %.2f d', mean(delay_vec))
+```
+
+###
+```{r}
+fit_stan <- function(
+  mod = 'fit_gamma.stan',
+  del_sample_to_death, # vector of delay for each individual in the data
+  chains = 1, # Number of MCMC chains to run
+  cores = parallel::detectCores(logical = FALSE),
+  ...
+) {
+  library(rstan)
+  
+  model <- stan_model(mod)
+  
+  N <- length(del_sample_to_death)
+  model_input_data <- list(
+    N = N,
+    x = del_sample_to_death
+  )
+  
+  fit <- sampling(
+    model, model_input_data, chains = chains, cores = cores,
+    ...
+  )
+}
+```
+
+## Fit gamma distribution
+```{r}
+fit_stan(mod = '../../code/fit_gamma.stan', 
+               del_sample_to_death = delay_vec, 
+               chains = 4) -> fit_gamma
+```
+## Extract gamma fits
+```{r}
+params_gamma <- rstan::extract(fit_gamma)
+
+params_gamma %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  pivot_longer(everything())%>%
+  ggplot()+
+  geom_density(aes(x = value, fill = name), alpha = .5, show.legend = FALSE) +
+  facet_wrap(.~name, nrow = 2, scales = 'free')+
+  ggtitle('Posterior parameter estimates for gamma distribution')
+```
+
+
+## Plot bivariate posterior for gamma fits
+```{r}
+params_gamma %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  mutate(mean = shape/rate,
+         var = shape/(rate^2)) %>%
+  ggplot()+
+  geom_point(aes(x = shape, y = rate), alpha = .5, color = 'dodgerblue')
+  ggtitle('Posterior shape vs rate')
+  
+  
+  params_gamma %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  mutate(mean = shape/rate,
+         var = shape/(rate^2)) %>%
+  ggplot()+
+  geom_point(aes(x = mean, y = var), alpha = .5, color = 'seagreen')
+  ggtitle('Posterior mean vs var')
+```
+
+
+```{r}
+fit_stan(mod = '../../code/fit_lognormal.stan', 
+               del_sample_to_death = delay_vec, 
+               chains = 4) -> fit_lnormal
+```
+## Extract lognormal fits
+```{r}
+params_lognormal <- rstan::extract(fit_lnormal)
+
+params_lognormal %>% as.data.frame() %>%
+  select(mu, sigma) %>%
+  pivot_longer(everything())%>%
+  ggplot()+
+  geom_density(aes(x = value, fill = name), alpha = .5, show.legend = FALSE) +
+  facet_wrap(.~name, nrow = 2, scales = 'free')+
+  ggtitle('Posterior parameter estimates for lognormal distribution')
+```
+
+
+
+
+
+## Get params
+```{r}
+sprintf('Gamma: shape is %.2f and variance of shape is %.2e', mean(params_gamma$shape), var(params_gamma$shape))
+sprintf('Gamma: rate is %.2f and variance of rate is %.2e', mean(params_gamma$rate), var(params_gamma$rate))
+
+
+sprintf('Lognormal: mu is %.2f and variance of mu is %.2e', mean(params_lognormal$mu), var(params_lognormal$mu))
+sprintf('Lognormal: sigma is %.2f and variance of sigma is %.2e', mean(params_lognormal$sigma), var(params_lognormal$sigma))
+```
+
+
+## Plot against data
+```{r}
+wait_df <- data.frame(wait = floor(delay_vec)) %>%
+  group_by(wait) %>%
+  summarise(count = n())
+
+
+post_gamma <- mapply(FUN = function(ss, rr) dgamma(x = wait_df$wait, shape = ss, rate = rr)*nn, 
+                     ss = params_gamma$shape,
+                     rr = params_gamma$rate) %>%
+  apply(MARGIN = 1, FUN = function(xx) data.frame(lower = quantile(xx, .025),
+                                                  med = quantile(xx, .5),
+                                                  upper = quantile(xx, .975))) %>%
+  bind_rows() %>%
+  mutate(wait = wait_df$wait)
+
+post_lognormal <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*nn, 
+                         mm = params_lognormal$mu,
+                         ss = params_lognormal$sigma) %>%
+  apply(MARGIN = 1, FUN = function(xx) data.frame(lower = quantile(xx, .025),
+                                                  med = quantile(xx, .5),
+                                                  upper = quantile(xx, .975))) %>%
+  bind_rows() %>%
+  mutate(wait = wait_df$wait)
+
+
+bind_rows(list(
+  gamma = post_gamma,
+  lognormal = post_lognormal
+), .id = 'dist') %>%
+  merge(wait_df, by = 'wait') %>%
+  ggplot()+
+  geom_bar(data = wait_df, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
+  geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
+  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)
+```
+
+## Save the posterior
+```{r}
+write_rds(params_lognormal, 'delay_infection_to_death_posterior.rds')
+```
+
