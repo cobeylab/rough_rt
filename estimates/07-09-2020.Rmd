@@ -151,26 +151,24 @@ ggsave(width = 4, height = 3, filename = sprintf('../figs/%s-Illinois_rt_from_id
 ## Function to estimate total infections given a fixed probability of observation
 ```{r}
 est_total_inf <- function(df, ## Data frame containing a column with daily observations
-                          p_obs, ## Probability of observing an infection. Assume fixed over time.
+                          p_obs, ## Vector of observation probabilities, one entry for each observation. If you provide a single number, assumes constant observation probability
                           obs_colname, ## Name of the column holding the observations
                           n_replicates = 1) ## Number of times to resample total infections 
   {
   draw_one_sample <- function(k, p){
-    # Given known k (number of observations), and p (probability of observation)
-    #  the best estimates of n is k/p
-    #  --> Create a vector of possible n values centered around k/p
-    possible_n_vec = seq(round(k/p*.1), round(k/p*3), by = 1)
-    # Get the binomial probability of observing k deaths given n total infections
-    lk_n_given_k_p = sapply(possible_n_vec, FUN = function(nn) dbinom(x = k, size = nn, prob = p))
-    # Normalize 
-    normalized_lk_n_given_k_p = lk_n_given_k_p/sum(lk_n_given_k_p)
-    # plot(possible_n_vec, normalized_lk_n_given_k_p)
-    # Draw a sample with weights given by normalized_lk...
-    sample(x = possible_n_vec, size = 1, replace = T, prob = normalized_lk_n_given_k_p)
+    # adjust observations to work with negative binomial, i.e., case with 0 observations
+    adjusted_k = replace(k, k==0, 0.1)
+    
+    # Draw a negative binomial sample
+    observations = round(mapply(rnbinom, 1, adjusted_k, p) + adjusted_k)
+    as.numeric(observations)
   }
   
+  obs = df %>% select(obs_colname) %>% unlist(use.names = F)
+  
   ## For each entry in the observations column, upscale
-  infection_samples = replicate(n = n_replicates, expr = sapply(pull(df, obs_colname), FUN = function(kk) draw_one_sample(kk, p_obs)))
+  infection_samples = replicate(n = n_replicates, draw_one_sample(obs, p_obs))
+
   colnames(infection_samples) = paste0('infections.', 1:n_replicates)
   bind_cols(df, as.data.frame(infection_samples))
 }
