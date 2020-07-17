@@ -1,0 +1,146 @@
+---
+title: "Estimate Rt from incident hospitalizations"
+output: html_notebook
+---
+
+Katie Gostic
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+
+
+```{r echo=FALSE}
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE)
+source('../code/util.R')
+source('../code/cori.R')
+```
+
+
+## Load data
+```{r}
+dat <- read_csv('../data/idph_linelist_timeseries.csv') %>%
+  filter(restore_region != 'unknown')  %>%
+  group_by(restore_region, date) %>%
+  summarise(new_deaths = sum(new_deaths)) %>%
+  ungroup()
+dat %>%
+  ggplot()+
+  geom_line(aes(x = date, y = new_deaths))+
+  facet_wrap(.~restore_region, scales = 'free_y')
+```
+# We need to bootstrap a stationary time series
+
+## Start by differencing to test for stationarity
+```{r}
+## Difference the data
+sdat <- dat %>%
+  arrange(date) %>%
+  group_by(restore_region) %>%
+  mutate(diff = c(new_deaths[1], diff(new_deaths))) 
+
+## Visualize differenced data
+ggplot(sdat) +
+  geom_line(aes(x = date, y = diff))+
+  facet_wrap(.~restore_region)
+
+## Use auto correlation function to test for stationarity
+par(mfrow = c(2,3))
+{
+for(rr in unique(sdat$restore_region)){
+  d.in <- subset(sdat, restore_region == rr)
+  acf(d.in$diff)
+}
+}
+
+## This looks good.
+```
+
+## Verify that you can recover the original time series from the differenced data
+```{r}
+un_difference <- function(ddat, x0 = NULL){
+  if(length(x0)!=0){
+    ddat <- c(x0, ddat)
+  }
+  dat <- numeric(length(ddat))
+  dat[1] <- ddat[1]
+  for(ii in 2:length(ddat)){
+    dat[ii] <- dat[ii-1]+ddat[ii]
+  }
+  dat
+}
+
+sdat <- sdat %>%
+  mutate(test_recovery = un_difference(diff))
+
+sdat %>%
+  ggplot()+
+  geom_point(aes(x = new_deaths, y = test_recovery))+
+  facet_wrap(.~restore_region, scales = 'free')+
+  ggtitle('Original data vs. undifferenced data')
+
+if(all(sdat$test_recovery == sdat$new_deaths)){
+  cat('Undifferencing successful')
+}else{
+  cat('Undifferencing error')
+}
+```
+
+## Block bootstrap the stationary (differenced) data
+```{r}
+## Bootstrap the diff time series for each restore region
+boot_one_rr <- function(rr){
+  rdat <- sdat %>%
+    filter(restore_region == rr) 
+  ts.in <- rdat %>%
+    slice(-1) %>%
+    pull(diff)
+  diff_samples <- tseries::tsbootstrap(x = ts.in, 
+                     nb = 100, 
+                     statistic = NULL,
+                     b = round(sqrt(nrow(sdat))), 
+                     type = 'stationary') 
+  colnames(diff_samples) = paste0('ds', 1:100)
+  
+  ## Recover the un-differenced bootstrap
+ts_samples = apply(diff_samples, 
+                   MARGIN = 2, 
+                   FUN = function(ts) un_difference(ddat = ts, x0 = rdat$diff[1]))
+
+pivot_longer(as.data.frame(diff_samples) %>% mutate(time = 1:nrow(.)), cols = 1:100) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = value, group = name), alpha = .5)+
+  ggtitle(rr)+
+  geom_line(data = rdat, aes(x = date-min(date), y = diff), color = 'red') -> diff_sample_plot
+
+pivot_longer(as.data.frame(ts_samples) %>% mutate(time = 1:nrow(.)), cols = 1:100) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = value, group = name), alpha = .5)+
+  ggtitle(rr)+
+  geom_line(data = rdat, aes(x = date-min(date), y = new_deaths), color = 'red') -> ts_sample_plot
+
+cowplot::plot_grid(diff_sample_plot, ts_sample_plot) -> plot
+
+return(list(ts_samples = ts_samples, plot = plot))
+}
+
+
+
+samples <- lapply(X = unique(dat$restore_region), FUN = boot_one_rr)
+
+lapply(samples, function(ll) ll$plot)
+```
+
+
+## This is not working
+
+We may need to use an ARMA model to get a stationary time series here.
+
+https://otexts.com/fpp2/arima-r.html
