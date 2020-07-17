@@ -1,0 +1,113 @@
+---
+title: "Fit gamma-distributed delays from sample collection to death"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(rstan)
+```
+
+
+## Import data from Northshore CIVIS
+
+```{r}
+delays <- read_csv('../collection_to_death_NS.csv')
+```
+## Fit gamma distribution
+```{r}
+delay_vec <- mapply(rep, x = delays$wait, times = delays$count) %>% unlist()
+stopifnot(length(delay_vec) == sum(delays$count) )
+sprintf('mean delay from sample collection to death is %.2f d', mean(delay_vec))
+```
+
+###
+```{r}
+fit_gamma_stan <- function(
+  mod = 'fit_gamma.stan',
+  delays, # vector of delay for each individual in the data
+  chains = 1, # Number of MCMC chains to run
+  cores = parallel::detectCores(logical = FALSE),
+  ...
+) {
+  library(rstan)
+  
+  model <- stan_model(mod)
+  
+  N <- length(delays)
+  model_input_data <- list(
+    N = N,
+    x = delays
+  )
+  
+  fit <- sampling(
+    model, model_input_data, chains = chains, cores = cores,
+    ...
+  )
+}
+```
+
+```{r}
+fit_gamma_stan(mod = '../../code/fit_gamma.stan', 
+               delays = delay_vec, 
+               chains = 4) -> fits
+```
+
+## Extract_fits
+```{r}
+params<-rstan::extract(fits)
+
+params %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  pivot_longer(everything())%>%
+  ggplot()+
+  geom_density(aes(x = value, fill = name), alpha = .5, show.legend = FALSE) +
+  facet_wrap(.~name, nrow = 2, scales = 'free')+
+  ggtitle('Posterior parameter estimates for gamma distribution')
+```
+
+## Plot bivariate posterior
+```{r}
+params %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  mutate(mean = shape/rate,
+         var = shape/(rate^2)) %>%
+  ggplot()+
+  geom_point(aes(x = shape, y = rate), alpha = .5, color = 'dodgerblue')
+  ggtitle('Posterior shape vs rate')
+  
+  
+  params %>% as.data.frame() %>%
+  select(shape, rate) %>%
+  mutate(mean = shape/rate,
+         var = shape/(rate^2)) %>%
+  ggplot()+
+  geom_point(aes(x = mean, y = var), alpha = .5, color = 'seagreen')
+  ggtitle('Posterior mean vs var')
+```
+
+## Get params
+```{r}
+sprintf('shape is %.2f and variance of shape is %.2f', mean(params$shape), var(params$shape))
+sprintf('rate is %.2f and variance of rate is %.2f', mean(params$rate), var(params$rate))
+```
+
+
+## Plot against data
+```{r}
+shape_post_median = params$shape %>% median()
+rate_post_median = params$rate %>% median()
+
+
+delays %>%
+  mutate(expected = dgamma(wait, shape = shape_post_median, rate = rate_post_median)*sum(count)) %>%
+  ggplot()+
+  geom_line(aes(x = wait, y = expected), lwd = 1) +
+  geom_bar(aes(x = wait, y = count), fill = 'deepskyblue', color = 'dodgerblue4', stat = 'identity', alpha = .5) +
+  ggtitle(sprintf('Delay ~ gamma, mean=%.2f, sd=%.2f', shape_post_median/rate_post_median, sqrt(shape_post_median*(1/rate_post_median)^2)),
+          subtitle = 'Bars show observed, line shows best fit distribution')+
+  theme_bw()
+```
+
