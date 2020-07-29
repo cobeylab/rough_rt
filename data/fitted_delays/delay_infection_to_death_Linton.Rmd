@@ -1,0 +1,97 @@
+---
+title: "Fit gamma-distributed del_sample_to_death from sample collection to death"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(rstan)
+```
+
+
+## Import data from Northshore CIVIS
+
+```{r}
+get_shape_rate <- function(mean, sd){
+  rate = mean/(sd^2)
+  shape = mean*rate
+  c(shape, rate)
+}
+
+get_mu_sigma <- function(mean, sd){
+  mu = log(mean^2/(sqrt(sd^2+mean^2)))
+  sigma = sqrt(log((sd^2)/(mean^2)+1))
+  c(mu, sigma)
+}
+nn = 100
+
+## Estimated delay from onset to death
+del_onset_to_death <- rlnorm(nn, get_mu_sigma(20.2, 11.6)[1], get_mu_sigma(20.2, 11.6)[2]) ## From Linton et al
+mean(del_onset_to_death); sd(del_onset_to_death)
+
+## Generate synthetic incubation times
+del_inf_to_onset <- rlnorm(nn, get_mu_sigma(5.6, 3.9)[1], get_mu_sigma(5.6, 3.9)[2])  # From Linton et al
+mean(del_inf_to_onset); sd(del_inf_to_onset)
+
+## Total delay
+delay_vec <- del_inf_to_onset + del_onset_to_death
+mean(delay_vec); sd(delay_vec)
+```
+## Fit gamma distribution
+```{r}
+sprintf('mean delay from infection to death is %.2f d', mean(delay_vec))
+```
+### Fit gamma using optim
+```{r}
+gamma_fit <- optim(par = c(shape = 15, rate = 1.5), 
+                   fn = function(pars, xx){
+                        -sum(dgamma(xx, shape = pars['shape'], rate = pars['rate'], log = T))
+                        }, 
+                   xx = delay_vec)
+```
+## Evaluate the likelihood across a grid
+```{r}
+gamma_pars = expand_grid(shape = seq(gamma_fit$par[1]-1.5, gamma_fit$par[1]+1.5, by = .01),
+                         rate = seq(.01, gamma_fit$par[2]+.5, by = .005)) %>%
+  rowwise() %>%
+  mutate(nll = -sum(dgamma(delay_vec, shape, rate, log = T)))
+
+gamma_pars_in = gamma_pars[sample(1:nrow(gamma_pars), size = 1000, replace = T, prob = exp(-gamma_pars$nll)), ]
+
+ggplot(gamma_pars) +
+  geom_raster(aes(x = shape, y = rate, fill = nll))+
+  geom_point(data = gamma_pars_in, aes(x = shape, y = rate), color = 'red')
+```
+
+
+### Fit lognormal using optim
+```{r}
+lognormal_fit <- optim(par = c(mu = 5, sigma = .5), 
+                   fn = function(pars, xx){
+                        -sum(dlnorm(xx, meanlog = pars['mu'], sdlog = pars['sigma'], log = T))
+                        }, 
+                   xx = delay_vec)
+```
+## Evaluate the likelihood across a grid
+```{r}
+ln_pars = expand_grid(mu = seq(3, 3.5, by = .001),
+                         sigma = seq(.3, .9, by = .001)) %>%
+  rowwise() %>%
+  mutate(nll = -sum(dlnorm(delay_vec, mu, sigma, log = T)))
+
+ln_pars_in = ln_pars[sample(1:nrow(ln_pars), size = 1000, replace = T, prob = exp(-ln_pars$nll)), ]
+
+ggplot(ln_pars) +
+  geom_raster(aes(x = mu, y = sigma, fill = nll))+
+  geom_point(data = ln_pars_in, aes(x = mu, y = sigma), color = 'red')
+```
+
+
+
+## Save the posterior
+```{r}
+write_rds(ln_pars_in, 'Linton_lognorm_sample.rds')
+```
+

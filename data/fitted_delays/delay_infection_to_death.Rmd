@@ -24,7 +24,68 @@ del_sample_to_death <- rep(obs_delay$wait, obs_delay$count) + runif(nn) - runif(
 del_inf_to_onset <- rgamma(n = nn, shape = 5.807, scale = 0.948) # From Lauer et al. 2020
 
 ## Generate synthetic delays from symptom onset to sample collection
-del_onset_to_sample <- rgamma(n = nn, shape = 2.5, scale = 1.25)
+carline_delays = data.frame(delay = c('<=48h', '3-7d', '>7d'), count = c(194, 328, 130))
+
+gamma_pars <- optim(par = c(shape = 2, rate = 1), fn = 
+        function(pars, counts){
+          log_cdensities = c(
+            pgamma(q = 2, pars['shape'], pars['rate'], log = T),
+            log((pgamma(7, pars['shape'], pars['rate']) - pgamma(2, pars['shape'], pars['rate']))),
+            log(1-pgamma(7, pars['shape'], pars['rate']))
+          )
+          
+          return(-sum(log_cdensities*counts))
+        },
+      counts = carline_delays$count)
+
+# 
+# lognormal_onset_to_sample <- optim(par = c(mu = 2, sigma = 1), fn = 
+#         function(pars, counts){
+#           log_cdensities = c(
+#             plnorm(q = 2, pars['mu'], pars['sigma'], log = T),
+#             log((plnorm(7, pars['mu'], pars['sigma']) - plnorm(2, pars['mu'], pars['sigma']))),
+#             1-plnorm(7, pars['mu'], pars['sigma'], log = T)
+#           )
+#           
+#           return(-sum(log_cdensities*counts))
+#         },
+#       counts = carline_delays$count)
+
+get_pgamma <- function(xx){
+  pgamma(xx, gamma_pars$par[1], gamma_pars$par[2])
+}
+
+## Visualize the fits
+{
+xx = barplot(carline_delays$count/sum(carline_delays$count))
+axis(1, at = xx, labels = carline_delays$delay)
+lines(xx, c(get_pgamma(2), get_pgamma(7)-get_pgamma(2), 1-get_pgamma(7)), col = 'red')
+points(xx, c(get_pgamma(2), get_pgamma(7)-get_pgamma(2), 1-get_pgamma(7)), col = 'red')
+}
+
+## Visualize the gamma density
+data.frame(xx = seq(0, 10, by = .1)) %>%
+  mutate(dens = dgamma(xx, gamma_pars$par['shape'], gamma_pars$par['rate']),
+         cdens = pgamma(xx, gamma_pars$par['shape'], gamma_pars$par['rate'])) %>%
+  ggplot()+
+  geom_line(aes(x = xx, y = dens))+
+  xlab('delay')+
+  ggtitle(sprintf('Delay from onset to sample ~ gamma(shape = %.2f, rate = %.2f)', gamma_pars$par[1], gamma_pars$par[2]), subtitle = sprintf('mean is %.2f and var is %.2f',gamma_pars$par[1]*gamma_pars$par[2], 
+                                            gamma_pars$par[1]*gamma_pars$par[2]^2))
+
+data.frame(xx = seq(0, 10, by = .1)) %>%
+  mutate(dens = dgamma(xx, gamma_pars$par['shape'], gamma_pars$par['rate']),
+         cdens = pgamma(xx, gamma_pars$par['shape'], gamma_pars$par['rate'])) %>%
+  ggplot()+
+  geom_line(aes(x = xx, y = cdens))+
+  geom_point(aes(x = 2, y = c(carline_delays$count[1]/sum(carline_delays$count))), color = 'red')+
+  geom_point(aes(x = 7, y = c(sum(carline_delays$count[1:2])/sum(carline_delays$count))), color = 'red')+
+  xlab('delay')+
+  ggtitle(sprintf('Delay from onset to sample ~ gamma(shape = %.2f, rate = %.2f)', gamma_pars$par[1], gamma_pars$par[2]), subtitle = sprintf('mean is %.2f and var is %.2f',gamma_pars$par[1]*gamma_pars$par[2], 
+                                            gamma_pars$par[1]*gamma_pars$par[2]^2))
+
+
+del_onset_to_sample <- rgamma(n = nn, shape = gamma_pars$par['shape'], rate = gamma_pars$par['rate'])
 
 delay_vec <- del_inf_to_onset + del_onset_to_sample + del_sample_to_death
 ```
@@ -167,7 +228,9 @@ bind_rows(list(
   ggplot()+
   geom_bar(data = wait_df, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
   geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
-  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)
+  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
+  ggtitle('Delay from infection to death', subtitle = sprintf('Empirical mean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(delay_vec), var(delay_vec), mean(params_lognormal$mu), mean(params_lognormal$sigma)))
 ```
 
 ## Save the posterior

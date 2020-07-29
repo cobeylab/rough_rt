@@ -1,0 +1,40 @@
+---
+title: "Compare shifted time series"
+output: html_notebook
+---
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+
+cases <- read_csv('idph_cases_timseries.csv') %>%
+  filter(restore_region!= 'unknown') %>%
+  mutate(restore_region = tolower(restore_region)) %>%
+  rename(date = specimen_collection_date,
+         n = new_cases) %>%
+  group_by(date, restore_region) %>%
+  summarise(n = sum(n))
+
+deaths <- read_csv('idph_linelist_timeseries.csv') %>%
+  filter(restore_region!= 'unknown') %>%
+  mutate(restore_region = tolower(restore_region)) %>%
+  rename(n = new_deaths) %>%
+  group_by(date, restore_region) %>%
+  summarise(n = sum(n))
+
+
+hosps <- read_csv('idph_cli_admissions_ts.csv') %>%
+  rename(date = epi_week_start) %>%
+  filter(restore_region!= 'unknown') %>%
+  mutate(restore_region = tolower(restore_region)) %>%
+  rename(n = n_admissions) %>%
+  group_by(date, restore_region) %>%
+  summarise(n = sum(n))
+```
+
+
+```{r}
+
+```
+

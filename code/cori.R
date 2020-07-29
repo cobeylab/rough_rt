@@ -37,6 +37,7 @@ get_cori <- function(df.in,
 
   st.time <- filter(df.in, shifted_obs>(50/window)) %>%
     pull(time) %>% head(1)
+  st.time <- max(2, st.time)
   
   ed.time <- filter(df.in, shifted_obs>0) %>%
     pull(time) %>% tail(1)

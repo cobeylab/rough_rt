@@ -1,5 +1,5 @@
 ---
-title: "Estimate Rt from incident deaths"
+title: "Test RL on synthetic data using uncertain delay"
 output: html_notebook
 ---
 
@@ -8,9 +8,8 @@ Katie Gostic + Phil Arevalo
 ```{r asis = T}
 cat(sprintf('\n## Last run %s', Sys.Date()))
 ```
-
-
-```{r echo=FALSE}
+```{r}
+## Preamble
 rm(list = ls())
 library(ggplot2)
 library(dplyr)
@@ -20,22 +19,92 @@ library(cowplot)
 library(EpiEstim)
 theme_set(theme_bw())
 knitr::opts_chunk$set(message = FALSE)
+parlist <- read_rds('../examples_syndat/true_pars.rds')
 source('../code/util.R')
 source('../code/cori.R')
+if(!dir.exists('figs')){dir.create('figs')}
+```
+
+## Extract SEIR simulation and plot.
+
+- Incidence here is observed at time of infection (S -> E).
+- SEIR simulation is deterministic
+
+```{r}
+setwd('../examples_syndat/')
+get_sim_df() %>%
+    filter(time < 300) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+    geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ggtitle('Epidemic curve') -> inc
+
+get_sim_df() %>% 
+  filter(time < 300) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
+
+cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
+
+sim_df <- get_sim_df()
 ```
 
 
-## Load data
+# Fig. 2 - estimate Rt in real time using three different methods, assuming perfect observation at the moment of infection.
+
+## Truncate the synthetic data to a maximum time of observation
+
 ```{r}
-dat <- read_csv('../data/idph_linelist_timeseries.csv') %>%
-  filter(restore_region != 'unknown') %>%
-  group_by(date, restore_region) %>%
-  summarise(new_deaths = sum(new_deaths))%>%
-  ungroup
-dat %>%
+mt <- 150
+source('../code/infer_times_of_infection_observation.R')
+
+## Get death delay distribution
+delay_posterior <- read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>%
+  bind_cols()
+
+# obs_delay_dist <- (function(nn){
+#   rgamma(nn, 5.8, scale = .95) + ## Incubation from Lauer et al
+#   rgamma(nn, 3.5, scale = 2) ## Arbitrary obs delay
+# })
+
+obs_delay_dist <- (function(nn){
+  rlnorm(n = nn, meanlog = 1, sdlog = .5)
+})
+
+
+get_tObs_from_tInf(n_dS = sim_df$incidence, times = sim_df$time, r_delay_dist = obs_delay_dist, return_times = T)
+
+rtdf <-  merge(
+  sim_df %>% select(time, incidence, true_rt),
+  get_tObs_from_tInf(n_dS = sim_df$incidence, 
+                     times = sim_df$time, 
+                     r_delay_dist = obs_delay_dist, 
+                     return_times = T) %>% rename(delayed = n),
+  by = 'time') %>%
+  filter(time <= mt)
+
+
+
+p_obs <- .5
+## Down sample observed time series
+rtdf$obs = sapply(rtdf$delayed, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs))
+```
+
+
+```{r}
+rtdf %>%
+  select(time, incidence, obs, delayed) %>%
+  mutate(shifted_obs = lead(obs, n = mean(obs_delay_dist(10000)))) %>%
+  pivot_longer(-time) %>%
   ggplot()+
-  geom_line(aes(x = date, y = new_deaths))+
-  facet_wrap(.~restore_region, scales = 'free_y')
+  geom_line(aes(x = time, y = value, color = name)) +
+  scale_color_manual('', values = c('black', 'green', 'dodgerblue', 'magenta')) +
+  theme(legend.position = c(.8, .8)) +
+  ylab('daily count') 
 ```
 
 # 1. Bootstrap the observed time series
@@ -46,8 +115,7 @@ dat %>%
 ```{r}
 ## Delay follows a lognormal
 ## Sample parameters from the posterior
-delay_posterior <- read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>%
-  bind_cols()
+
 ```
 
 # 3. Perform RL deconvolution using the bootstrapped observations and delay distributions
@@ -88,20 +156,24 @@ deconvolve <- function(obs,  ## Vector of counts per day
   mapply(FUN = function(mm, ss){
     get_RL(observed = obs, 
            times = times, 
-           p_delay = get_discrete_lognormal(k = 0:(length(obs)-1), mu = mm, sigma = ss))
+           p_delay = get_discrete_lognormal(k = 0:(length(obs)-1), mu = mm, sigma = ss)) %>%
+        filter(time >= 0)
   }, 
   mm = spars$mu, ss = spars$sigma, SIMPLIFY = FALSE)
   
 }
 
-decon <- deconvolve(dat %>% subset(restore_region == 'chicago') %>% pull(new_deaths), delay_posterior = delay_posterior, nboot = 10) %>%
-  bind_rows(.id = 'rep') 
+decon <- deconvolve(rtdf$obs, delay_posterior = delay_posterior, nboot = 100) 
+
 
 decon %>%
+  bind_rows(.id = 'rep') %>%
   ggplot() +
   geom_line(aes(x = time, y = RL_result, group = rep), alpha = .3) +
-  geom_line(data = dat %>% subset(restore_region == 'chicago'),
-            aes(x = 1:length(new_deaths), y = new_deaths), color = 'red')
+  geom_line(data = rtdf,
+            aes(x = time, y = incidence), color = 'red') +
+    geom_line(data = rtdf,
+            aes(x = time, y = obs), color = 'blue')
 ```
 
 
@@ -139,59 +211,34 @@ est_total_inf <- function(df, ## Data frame containing a column with daily obser
 * blue shows observations
 
 ```{r}
-## Get an aggregate time series of observations for the whole state
-all_IL <- dat %>% group_by(date) %>% summarise(new_deaths = sum(new_deaths))
-## Estimate total infections from observations
-est_total_inf(all_IL, 
-              p_obs = .5, 
-              obs_colname = 'new_deaths',
-              n_replicates = 1) %>%
-  pivot_longer(-date) %>%
+## Estimate total infections from deconvolutions
+
+upscaled <- lapply(decon, FUN = function(df) {
+  est_total_inf(df, 
+                p_obs = p_obs, 
+                obs_colname = 'RL_result',
+                n_replicates = 1) 
+}
+)
+  
+  
+  
+upscaled %>% 
+  bind_rows(.id = 'rep') %>%
+  pivot_longer(-c(time, rep)) %>%
   ggplot()+
-  geom_line(aes(x = date, y = value, color = name))+
-  ggtitle('p = .5')
+  geom_line(aes(x = time, y = value, color = name, group = interaction(name, rep)))+
+  geom_line(data = rtdf, aes(x = time, y = incidence))
 ```
 
-## Example -- bootstrap many time series of infections
-
-* red shows estimated infections
-* blue shows observations
-
-```{r}
-## Example -- bootstrap many time series of infections from observations
-est_total_inf(all_IL, 
-              p_obs = .1, 
-              obs_colname = 'new_deaths', 
-              n_replicates = 50) %>%
-  pivot_longer(-date) %>%
-  mutate(is.observed = !grepl('infection', name)) %>%
-  ggplot() +
-  geom_line(aes(x = date, y = value, group = name, color = is.observed), alpha = .5)+
-  geom_hline(aes(yintercept = 1))
-```
 ## Wrapper to feed resampled time series of observations into Rt estimator
 ```{r}
 overall_rt_boot_wrapper <- function(
- dat,
- obs_colname,
+ infection_ests,
  p_obs,
- mean_delay,
- n_replicates
+ mean_delay=0,
+ ww = 3
 ){
-  
-  ## Rename the observations column for ease of manipulation
-  dat <- rename(dat, observations = eval(obs_colname))
-  
-  ## Calculate the window size
-  low_inf_count = filter(dat, observations>0) %>%
-    pull(observations) %>%
-    quantile(.2) %>%
-    round()
-  ww = floor(50/low_inf_count)
-  cat(sprintf('\noverall window is %.0f\n', ww))
-  
-  ## Estimate total infections from observations
-  infection_ests <- est_total_inf(df = dat, obs_colname = 'observations', p_obs = p_obs, n_replicates = n_replicates)
   
 
   
@@ -199,29 +246,27 @@ overall_rt_boot_wrapper <- function(
   library(doParallel)
   cl <- makeCluster(parallel::detectCores()-1)
   registerDoParallel(cl)
-  est_list <- foreach(inf_col= paste0('infections.', 1:n_replicates),
+  est_list <- foreach(inf_col= names(infection_ests)[-1],
                       .packages = 'dplyr','EpiEstim', 'tidyr', 
-                      .export = c('get_cori', 'na_to_0')) %dopar% {
+                      .export = c('get_cori', 'na_to_0', 'parlist')) %dopar% {
                           ins = infection_ests %>% 
-                            select(date, eval(inf_col)) %>%
-                            mutate(time = 1:nrow(.))
+                            select(time, eval(inf_col)) 
                    
                             get_cori(ins, 
                               obs_col_name = inf_col, 
                               window = ww, 
                               out_name = 'rt',
                               mean_delay = mean_delay, 
-                              SI_mean = 4.5, ## Rough estimates from Ganyani et al
-                              SI_var = 1.7,   
+                              SI_mean = parlist$true_mean_SI, ## Rough estimates from Ganyani et al
+                              SI_var = parlist$true_var_SI,   
                               wend = F) %>%
-                            merge(select(ins, time, date), by = 'time') %>%
-                            select(-time)
+                            merge(select(ins, time), by = 'time') 
   }
   stopCluster(cl)
   
   ## For each date, get the median of means, the lower .025 of lower bounds and the upper .975 of upper bounds
   summarized_ests <-  bind_rows(est_list, .id = 'replicate') %>%
-    group_by(date) %>%
+    group_by(time) %>%
     ## PHIL - for each replicate, we get a mean, upper and lower CI rt estimate.
     ##    I'm not sure what the best way to aggregate is.
     ##    Here I'm taking the median of means, the lower bound of lower bounds and the upper bound of upper bounds.
@@ -239,19 +284,21 @@ overall_rt_boot_wrapper <- function(
 
 ## Test bootstrap
 ```{r}
-test_overall_bootstrap <- overall_rt_boot_wrapper(dat = all_IL, 
-                        obs_colname = 'new_deaths', 
-                        p_obs = .8, 
-                        mean_delay = 20, 
-                        n_replicates = 50)
+test_overall_bootstrap <- overall_rt_boot_wrapper(infection_ests = upscaled %>% 
+                                                    bind_rows(.id = 'rep') %>% 
+                                                    mutate(RL_result = round(RL_result)) %>%
+                                                    pivot_wider(id_cols = time, names_from = 'rep', names_prefix = 'infections.', values_from = RL_result),
+                        p_obs = p_obs)
 ```
 
 ```{r}
 test_overall_bootstrap %>%
+  merge(sim_df, by = 'time', all.x = T) %>%
   ggplot()+
-  geom_line(aes(x = date, y = rt.mean))+
-  geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), alpha = .3)+
+  geom_line(aes(x = time, y = rt.mean))+
+  geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper), alpha = .3)+
   geom_hline(aes(yintercept = 1))+
+  geom_line( aes(x = time, y = true_rt), color = 'dodgerblue')+
   ylab('Rt')
 ```
 

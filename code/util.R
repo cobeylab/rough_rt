@@ -153,28 +153,3 @@ gg_png <- function(ww, ## width (in)
 }
 
 
-
-
-
-# ## Get the first time at which cumulative case count is >12, or start at time 2 if cumulative incidence is immediately >12
-# st.time <- max(
-#   3,
-#   df.in %>% 
-#     mutate(cs = cumsum(get(icol_name))) %>%
-#     filter(cs > 12) %>%
-#     slice(1) %>%
-#     pull(time) 
-#   )
-# 
-# ## Get the last time at which incidence is >0 
-# ed.time <- min(
-#   max(df.in$time),
-#   df.in %>%
-#     filter(get(icol_name)==0 & time >= st.time) %>%
-#     slice(1) %>%
-#     pull(time)
-#   
-# )
-# 
-# idat <- df.in %>%
-#   filter(time >= st.time & time <= ed.time)

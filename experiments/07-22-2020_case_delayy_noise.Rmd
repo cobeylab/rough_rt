@@ -1,0 +1,339 @@
+---
+title: "Test RL on synthetic data using uncertain delay"
+output: html_notebook
+---
+
+Katie Gostic + Phil Arevalo
+
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+```{r}
+## Preamble
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE)
+parlist <- read_rds('../examples_syndat/true_pars.rds')
+source('../code/util.R')
+source('../code/cori.R')
+source('../code/Richardson_Lucy.R')
+source('../code/deconvolve.R')
+source('../code/upscale.R')
+source('../code/rt_boot.R')
+if(!dir.exists('figs')){dir.create('figs')}
+outdir = 'onsets_noise'
+if(!dir.exists(paste0('testfigs/', outdir))) dir.create(paste0('testfigs/', outdir))
+```
+
+## Extract SEIR simulation and plot.
+
+- Incidence here is observed at time of infection (S -> E).
+- SEIR simulation is deterministic
+
+```{r}
+setwd('../examples_syndat/')
+get_sim_df() %>%
+    filter(time < 300) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+    geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ggtitle('Epidemic curve') -> inc
+
+get_sim_df() %>% 
+  filter(time < 300) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
+
+cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
+
+sim_df <- get_sim_df()
+```
+
+
+# Fig. 2 - estimate Rt in real time using three different methods, assuming perfect observation at the moment of infection.
+
+## Truncate the synthetic data to a maximum time of observation
+
+```{r}
+# 
+# post <- read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>%
+#   bind_cols() %>%
+#   arrange(mu)
+# 
+# icolname <- 'incidence'
+# delay_type = 'lognormal'
+# true_delay_pars <- c(mu = post$mu[round(nrow(post)/2)],
+#                      sigma = post$sigma[round(nrow(post)/2)])
+# delay_posterior <- post
+# mt = 150
+# p_obs = .5
+
+
+full_test <- function(sim_df,
+                      icolname,
+                      mt, 
+                      p_obs, 
+                      true_delay_pars, 
+                      delay_posterior, 
+                      delay_type = 'lognormal',
+                      gen_int_pars,
+                      nboot = 100,
+                      outname,
+                      outdir = outdir){
+  
+  ## Check inputs
+  sim_df$incidence <- sim_df[,icolname]
+  sim_df$incidence <- round(sim_df$incidence)
+  sim_df$incidence <- na_to_0(sim_df$incidence)
+  stopifnot('incidence' %in% colnames(sim_df))
+  
+  source('../code/infer_times_of_infection_observation.R')
+  
+  ## 1. Generate synthetic observations ----------
+  ##     Set the delay to observation
+  if(delay_type == 'lognormal'){
+    rdelay <- function(nn){rlnorm(nn, true_delay_pars[1], true_delay_pars[2])}
+  }else{
+    stopifnot(delay_type == 'gamma')
+     rdelay <- function(nn){rgamma(nn, true_delay_pars[1], true_delay_pars[2])}
+  }
+  
+  ## Convolve to get synthetic times of observation
+  sim_df <-  merge(
+    sim_df %>% select(time, incidence, true_rt),
+    get_tObs_from_tInf(n_dS = sim_df$incidence, 
+                     times = sim_df$time, 
+                     r_delay_dist = rdelay, 
+                     return_times = T) %>% rename(delayed = n),
+  by = 'time') %>%
+  filter(time <= mt)
+  ## Downsample based on pobs
+  sim_df$obs = sapply(sim_df$delayed, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs))
+  ## Shift back by mean delay
+  sim_df$shifted_obs = lead(sim_df$obs, n = round(mean(rdelay(10000))))
+  ## Plot
+  sim_df %>%
+    select(time, incidence, delayed, obs, shifted_obs) %>%
+    setNames(c('time', '1. total infections', '2. total delayed', '3. observations', '4. shifted observations')) %>%
+    pivot_longer(-time) %>%
+    ggplot() +
+    geom_line(aes(x = time, y = value, color = name))+
+    ylab('daily count')+
+    ggtitle('synthetic data') -> syndat
+  
+  ## 2. Bootstrap the observed time series ---------------
+  
+  
+  ## 3. Use RL to infer times of infection given the posterior parms of the delay
+  deconvolved <- deconvolve(sim_df$obs, delay_posterior = delay_posterior, nboot = nboot, delay_type = delay_type) 
+  
+  ## 4. Upscale from deconvolved times of infection to total infections based on p_obs
+  upscaled <- lapply(deconvolved, FUN = function(df) {
+  est_total_inf(df, 
+                p_obs = p_obs, 
+                noise_sd = 10,
+                obs_colname = 'RL_result',
+                n_replicates = 1) 
+}
+)
+  
+  RL_plot <- syndat + 
+    geom_line(data = deconvolved %>% bind_rows(.id = 'rep'), aes(x = time, y = RL_result, group = rep), alpha = .1) +
+    ylim(c(0, max(sim_df$incidence)+20))+
+    ggtitle('Inferred infections (partial)')
+  
+  
+  upscale_plot <- syndat + 
+    geom_line(data = upscaled %>% bind_rows(.id = 'rep'), aes(x = time, y = infections.1, group = rep), alpha = .1)+
+        ylim(c(0, max(sim_df$incidence)+20))+
+    ggtitle('Estimated total infections')
+  
+  
+  ## Calculate the window size
+  low_inf_count = filter(bind_rows(deconvolved), RL_result>0 & !is.na(RL_result)) %>%
+    pull(RL_result) %>%
+    quantile(.2) %>%
+    round()
+  ww.in = max(1, floor(100/low_inf_count))
+  cat(sprintf('\noverall window is %.0f\n', ww.in))
+  
+  ## 5. Estimate Rt
+  rt_ests <- rt_boot(infection_ests = upscaled %>% 
+                                                    bind_rows(.id = 'rep') %>% 
+                                                    mutate(RL_result = round(RL_result)) %>%
+                                                    pivot_wider(id_cols = time, 
+                                                                names_from = 'rep', 
+                                                                names_prefix = 'infections.', 
+                                                                values_from = RL_result),
+                        p_obs = p_obs, ww = ww.in)
+  
+  
+  ## 6. Format outputs
+ rt_plot <- sim_df %>%
+    merge(rt_ests$summary, by = 'time') %>% 
+    ggplot()+
+    geom_line(aes(x = time, y = true_rt))+
+    geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper), fill = 'yellow', alpha = .5)+
+       geom_line(data = bind_rows(rt_ests$all, .id = 'rep'), aes(x = time, y = rt.mean, group = rep), alpha = .5, color = 'orange')+
+   geom_line(aes(x = time, y = rt.mean), color = 'red')+
+   ylim(c(0, 3))+
+   ylab('Rt')
+ 
+ 
+ delplot <- delay_posterior %>% 
+   select(1:2) %>%
+   pivot_longer(1:2) %>%
+   ggplot()+
+   geom_vline(data = data_frame(name = c('mu', 'sigma'), value = true_delay_pars), aes(xintercept = value))+
+   geom_density(aes(x = value, fill = name, color = name), alpha = .5)+
+   facet_grid(.~name, scales = 'free_x') +
+   ggtitle(sprintf('%s delay', delay_type), subtitle = 'speficied distribution (colored distribution) vs. truth (black line)')
+ 
+ 
+ cowplot::plot_grid(syndat, 
+                    plot_grid(RL_plot+theme(legend.position = 'none'), 
+                              upscale_plot+theme(legend.position = 'none'), nrow = 1), 
+                    delplot,
+                    rt_plot, nrow = 4, ncol = 1) -> pp
+ 
+ ggsave(filename = sprintf('testfigs/%s/%s.png',
+                outdir,
+                outname), 
+        plot = pp,
+        width = 6, 
+        height = 8, 
+        dpi = 300, 
+        units = 'in', 
+        device = 'png')
+ 
+ return(list(sim_df = sim_df %>% merge(rt_ests$summary, by = 'time'),
+             RL = deconvolved,
+             upcaled = upscaled,
+             rt_ests = rt_ests))
+  
+}
+```
+
+## Set distribution of delay params
+```{r}
+## From Lauer et al
+del_post = data.frame(mu = rnorm(1000, 1.621, .067), 
+                      sigma = rnorm(1000, .418, 0.062)) %>%
+  mutate(mu = ifelse(mu <= .001, .001, mu),
+         sigma = ifelse(sigma <= 0.001, .001, sigma))
+
+del_pars <- colMeans(del_post)
+```
+
+
+## Test realistic lognormal delay
+Don't consider variability in the delay parameters
+```{r}
+# test_1 <- full_test(sim_df, 
+#           icolname = 'incidence', 
+#           mt = 150, 
+#           p_obs = 1, 
+#           true_delay_pars = del_pars, 
+#           delay_posterior = data.frame(mu = del_pars[1], sigma = del_pars[2]), 
+#           delay_type = 'lognormal', 
+#           gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+#           nboot = 100,
+#           outname = 'perfectSpec_perfectObs_noPostVar')
+
+# 
+# icolname = 'incidence'
+# mt = 150
+# p_obs = 1
+# true_delay_pars = c(1.621, .418)
+# delay_posterior = del_post
+# delay_type = 'lognormal'
+# gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI)
+# nboot = 10
+# outname = 'perfectSpec_perfectObs_noPostVar'
+
+```
+## Test realistic lognormal delay
+WITH consider variability in the delay parameters
+```{r}
+# test_2 <- full_test(sim_df, 
+#           icolname = 'incidence', 
+#           mt = 150, 
+#           p_obs = 1, 
+#           true_delay_pars = del_pars, 
+#           delay_posterior = del_post, 
+#           delay_type = 'lognormal', 
+#           gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+#           nboot = 100,
+#           outname = 'onsets/perfectSpec_perfectObs_ostVar')
+```
+## partial observation
+With partial observation
+```{r}
+test_3 <- full_test(sim_df, 
+          icolname = 'incidence', 
+          mt = 150, 
+          p_obs = .5, 
+          true_delay_pars = del_pars, 
+          delay_posterior = del_post, 
+          delay_type = 'lognormal', 
+          gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+          nboot = 100,
+          outname = 'perfectSpec_5Obs_postVar',
+          outdir = outdir)
+```
+
+
+```{r}
+test_4 <- full_test(sim_df, 
+          icolname = 'incidence', 
+          mt = 150, 
+          p_obs = .1, 
+          true_delay_pars = del_pars, 
+          delay_posterior = del_post, 
+          delay_type = 'lognormal', 
+          gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+          nboot = 100,
+          outname = 'perfectSpec_.1obs_postVar',
+          outdir = outdir)
+```
+
+
+
+
+```{r}
+test_5 <- full_test(sim_df, 
+          icolname = 'incidence', 
+          mt = 150, 
+          p_obs = .5, 
+          true_delay_pars = c(log(exp(del_pars[1])+2), log(exp(del_pars[2])+3)), 
+          delay_posterior = del_post, 
+          delay_type = 'lognormal', 
+          gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+          nboot = 100,
+          outname = 'onsets/misspec2d_.5Obs_postVar')
+```
+
+## Test realistic lognormal delay
+With partial observation
+```{r}
+test_6 <- full_test(sim_df, 
+          icolname = 'incidence', 
+          mt = 150, 
+          p_obs = .1, 
+          true_delay_pars = c(log(exp(del_pars[1])+2), log(exp(del_pars[2])+3)), 
+          delay_posterior = del_post, 
+          delay_type = 'lognormal', 
+          gen_int_pars = c(parlist$true_mean_SI, parlist$true_var_SI), 
+          nboot = 100,
+          outname = 'onsets/misspec2d_.1Obs_postVar')
+```

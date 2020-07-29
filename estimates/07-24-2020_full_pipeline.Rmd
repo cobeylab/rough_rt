@@ -1,0 +1,127 @@
+---
+title: "Estimate Rt from incident hospitalizations"
+output: html_notebook
+---
+
+Katie Gostic
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+
+
+```{r echo=FALSE}
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE)
+source('../code/util.R')
+source('../code/cori.R')
+source('../code/rt_pipeline.R')
+source('../code/deconvolve.R')
+source('../code/Richardson_Lucy.R')
+source('../code/upscale.R')
+source('../code/rt_boot.R')
+```
+
+
+## Load data
+```{r}
+dat <- read_csv('../data/idph_linelist_timeseries.csv') %>%
+  filter(restore_region != 'unknown') %>%
+  group_by(date, restore_region) %>%
+  summarise(new_deaths = sum(new_deaths))
+dat %>%
+  ggplot()+
+  geom_line(aes(x = date, y = new_deaths))+
+  facet_wrap(.~restore_region, scales = 'free_y')
+```
+
+## Estimate Rt by region
+```{r}
+# df = dat %>% filter(restore_region == 'chicago')
+# obscolname ='new_deaths'
+# p_obs = .9
+# delay_pars = read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>% bind_cols %>% select(1:2)
+# delay_type = 'lognormal'
+# gen_int_pars = c(mean = 4.5, var = 1.7) ## From Ganyani et al
+# nboot = 10
+
+
+
+rt_by_region <- function(rr){
+  sprintf('restore region is %s', rr)
+ out = full_rt_pipeline(df = dat %>% filter(restore_region == rr), 
+                  obscolname ='new_deaths',
+                   p_obs = .9,
+                   delay_pars = read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>% bind_cols %>% select(1:2),
+                   delay_type = 'lognormal',
+                   gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
+                   nboot = 25, 
+                   ttl = rr)
+ sprintf('%s - done\n', rr)
+return(out)
+}
+```
+
+## Run function for each region to estimate Rt
+Takes a few minutes to run, depending on size of nboot
+Can't be parallelized because internal operations are already running in parallel
+```{r}
+regional_estimates <- lapply(unique(dat$restore_region), rt_by_region) 
+names(regional_estimates)  = unique(dat$restore_region)
+```
+
+```{r}
+pdf(file = sprintf('../figs/%s-Regional_rt_from_idph_deaths.pdf', Sys.Date()))
+lapply(regional_estimates, function(ll) cowplot::plot_grid(ll$upscale_plot + theme(legend.position = c(.8, .8)), ll$rt_plot, ncol = 1)) 
+dev.off()
+```
+
+## Plot regional estimates
+```{r}
+# regional_estimates %>%
+#   ggplot()+
+#   geom_line(aes(x = date, y = rt.mean, color = window))+
+#   geom_ribbon(aes(x = date, ymin = rt.025, ymax = rt.975), alpha = .3)+
+#   geom_hline(aes(yintercept = 1))+
+#   facet_wrap(.~restore_region) +
+#   ylab('Rt') +
+#   scale_color_viridis_c() +
+#   geom_vline(aes(xintercept = as.Date(max(dat$date))), lty = 2)+
+#   xlim(c(as.Date(min(dat$date)), as.Date(max(dat$date))))
+# ggsave(width = 7, height = 5, filename = sprintf('../figs/%s-regional_rt_from_idph_deaths.png', Sys.Date()), dpi = 300)
+```
+
+## Estimate Rt overall
+```{r}
+rt_overall <- function(rr){
+  sprintf('restore region is %s', rr)
+ out = full_rt_pipeline(df = dat %>% group_by(date) %>% 
+                          summarise(new_deaths = sum(new_deaths, na.rm = T)), 
+                  obscolname ='new_deaths',
+                   p_obs = .9,
+                   delay_pars = read_rds('../data/fitted_delays/delay_infection_to_death_posterior.rds') %>% bind_cols %>% select(1:2),
+                   delay_type = 'lognormal',
+                   gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
+                   nboot = 25, 
+                   ttl = rr)
+ sprintf('%s - done\n', rr)
+return(out)
+}
+```
+
+## Estimate Rt overall
+```{r}
+overall_estimates <- rt_overall(dat)
+```
+
+## Plot
+```{r}
+cowplot::plot_grid(overall_estimates$upscale_plot + theme(legend.position = c(.8, .8)), overall_estimates$rt_plot, ncol = 1)
+ggsave(width = 4, height = 3, filename = sprintf('../figs/%s-Illinois_rt_from_idph_deaths.png', Sys.Date()), dpi = 300)
+```
