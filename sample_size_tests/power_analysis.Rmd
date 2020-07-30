@@ -1,0 +1,80 @@
+---
+title: "Test sample size"
+output: html_notebook
+---
+
+Katie Gostic + Phil Arevalo
+
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+```{r}
+## Preamble
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE)
+```
+
+## Extract SEIR simulation and plot.
+
+- Incidence here is observed at time of infection (S -> E).
+- SEIR simulation is deterministic
+
+```{r}
+source('../code/util.R')
+parlist <- read_rds('true_pars.rds')
+get_sim_df() %>%
+    filter(time < 300) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+    geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ggtitle('Epidemic curve') -> inc
+
+get_sim_df() %>% 
+  filter(time < 300) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
+
+cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
+
+sim_df <- get_sim_df()
+```
+
+
+# Fig. 2 - estimate Rt in real time using three different methods, assuming perfect observation at the moment of infection.
+
+## Truncate the synthetic data to a maximum time of observation
+
+```{r}
+source('test_sample_size.R')
+print(test_sample_size)
+```
+
+## Test 1
+```{r}
+ss_10 <- test_sample_size(p_obs = NULL, ## Numeric. Must be a single numeric constant. Default is 1.
+                          median_cases_per_day = 10, ## If specified, overrides p_obs. The function will calculate the fraction observed to obtain the desired median.
+                          nboot = 10) ## Number of times to bootstrap over uncertainty in the delay parameters. Should really be higher than 10, but for testing I'm prioritizing speed.
+ss_10$rt_df
+ss_10$outplot
+```
+
+
+
+## Test 2
+```{r}
+ss_500 <- test_sample_size(median_cases_per_day = 500, 
+                           nboot = 10)
+ss_500$rt_df
+ss_500$outplot
+```
