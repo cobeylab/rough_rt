@@ -19,10 +19,15 @@ source('../code/rt_boot.R')
 
 
 ## Load data
-dat <- read_csv('../data/idph_linelist_timeseries.csv') %>%
+dat_raw <- read_csv('../data/idph_linelist_timeseries.csv') %>%
   filter(restore_region != 'unknown') %>%
   group_by(date, restore_region) %>%
   summarise(new_deaths = sum(new_deaths))
+dat_overall <- dat_raw %>%
+  filter(restore_region != 'chicago') %>%
+  ungroup %>% group_by(date) %>%
+  summarise(restore_region = 'IL_Overall', new_deaths = sum(new_deaths))
+dat <- bind_rows(dat_raw, dat_overall)
 dat %>%
   ggplot()+
   geom_line(aes(x = date, y = new_deaths))+
@@ -118,37 +123,35 @@ regional_cori<- lapply(unique(dat$restore_region), FUN = cori_by_region) %>%
          rt.upper = rt.975)
 overall_cori <- cori_by_region('overall')
 
-
-
-
-## Estimate Rt overall --------------------------------------------
-rt_overall <- function(rr){
-  sprintf('restore region is %s', rr)
- out = full_rt_pipeline(df = dat %>% filter(restore_region != 'chicago') %>% group_by(date) %>% 
-                          summarise(new_deaths = sum(new_deaths, na.rm = T)), 
-                  obscolname ='new_deaths',
-                   p_obs = .9,
-                   delay_pars = read_rds('../data/fitted_delays/Linton_lognorm_sample.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2),
-                   delay_type = 'lognormal',
-                   gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
-                   nboot = 25, 
-                   ttl = 'IL Overall')
- sprintf('%s - done\n', rr)
-return(out)
-}
-overall_estimates <- rt_overall(dat)
-
-## Plot
-cowplot::plot_grid(overall_estimates$upscale_plot + theme(legend.position = c(.8, .8)), overall_estimates$rt_plot, ncol = 1)
-ggsave(width = 4, height = 3, filename = sprintf('../figs/%s/Illinois_rt_from_idph_deaths.png', Sys.Date()), dpi = 300)
-
-
+# 
+# 
+# 
+# ## Estimate Rt overall --------------------------------------------
+# rt_overall <- function(rr){
+#   sprintf('restore region is %s', rr)
+#  out = full_rt_pipeline(df = dat %>% filter(restore_region != 'chicago') %>% group_by(date) %>% 
+#                           summarise(new_deaths = sum(new_deaths, na.rm = T)), 
+#                   obscolname ='new_deaths',
+#                    p_obs = .9,
+#                    delay_pars = read_rds('../data/fitted_delays/Linton_lognorm_sample.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2),
+#                    delay_type = 'lognormal',
+#                    gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
+#                    nboot = 25, 
+#                    ttl = 'IL Overall')
+#  sprintf('%s - done\n', rr)
+# return(out)
+# }
+# overall_estimates <- rt_overall(dat)
+# 
+# ## Plot
+# cowplot::plot_grid(overall_estimates$upscale_plot + theme(legend.position = c(.8, .8)), overall_estimates$rt_plot, ncol = 1)
+# ggsave(width = 4, height = 3, filename = sprintf('../figs/%s/Illinois_rt_from_idph_deaths.png', Sys.Date()), dpi = 300)
+# 
+# 
 
 ## Save results -------------------------------------------------------
-write_csv(lapply(regional_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('csv/deaths_regional_%s.csv', Sys.Date()))
-write_csv(regional_cori, sprintf('csv/shifted_deaths_regional_%s.csv', Sys.Date()))
-write_csv(overall_cori, sprintf('csv/shifted_deaths_overall_%s.csv', Sys.Date()))
-write_csv(overall_estimates$rt_ests$summary, sprintf('csv/deaths_overall_%s.csv', Sys.Date()))
-write_rds(regional_estimates, sprintf('csv/regional_estimates_deaths_%s.rds', Sys.Date()))
-write_rds(overall_estimates, sprintf('csv/overall_estimates_deaths_%s.rds', Sys.Date()))
-write_csv(dat, sprintf('csv/dat_deaths_%s.csv', Sys.Date()))
+write_csv(lapply(regional_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/deaths_covid_region.csv', Sys.Date()))
+write_csv(regional_cori, sprintf('../figs/%s/shifted_deaths_covid_region.csv', Sys.Date()))
+write_rds(regional_estimates, sprintf('../figs/%s/restore_region_estimates_deaths.rds', Sys.Date()))
+
+

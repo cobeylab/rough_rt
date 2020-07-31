@@ -119,7 +119,7 @@ rt_by_region <- function(rr, dat){
   cat(sprintf('restore region is %s\n', rr))
   out = full_rt_pipeline(df = dat %>% filter(region == rr), 
                          obscolname ='smoothed',
-                         p_obs = .9,
+                         p_obs = .15,
                          delay_pars = read_rds('../data/fitted_delays/delay_infection_to_test_posterior.rds') %>% bind_cols %>% select(1:2),
                          delay_type = 'lognormal',
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al

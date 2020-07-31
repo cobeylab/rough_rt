@@ -1,5 +1,5 @@
 ---
-title: "Estimate Rt from incident hospitalizations"
+title: "Estimate Rt from incident deaths"
 output: html_notebook
 ---
 
@@ -37,7 +37,7 @@ dat %>%
 ## Estimate Rt by region
 ```{r}
 ## Input rr is the name of a restore region
-rt_by_region <- function(rr){
+cori_by_region <- function(rr){
   ## Subset and reformat the data frame
   ins <- filter(dat, restore_region == rr) %>% 
     arrange(date) %>%
