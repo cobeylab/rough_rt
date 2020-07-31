@@ -153,3 +153,18 @@ gg_png <- function(ww, ## width (in)
 }
 
 
+min_0 <- function(xx) ifelse(xx<0, 0, xx)
+
+
+
+get_shape <- function(mean, vv){
+  rate = mean/vv
+  shape = mean*rate
+  shape
+}
+
+get_rate <- function(mean, vv){
+  rate = mean/vv
+  shape = mean*rate
+  rate
+}

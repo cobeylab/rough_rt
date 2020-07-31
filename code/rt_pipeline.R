@@ -1,14 +1,14 @@
-# df = dat %>% filter(restore_region == rr)
-# obscolname ='smoothed'
+# df = dat %>% filter(restore_region != 'chicago') %>% group_by(date) %>% 
+#   summarise(new_deaths = sum(new_deaths, na.rm = T))
+# obscolname ='new_deaths'
 # p_obs = .9
-# delay_pars = read_rds('../data/fitted_delays/delay_infection_to_test_posterior.rds') %>% bind_cols %>% select(1:2)
+# delay_pars = read_rds('../data/fitted_delays/Linton_lognorm_sample.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2)
 # delay_type = 'lognormal'
 # gen_int_pars = c(mean = 4.5, var = 1.7) ## From Ganyani et al
 # nboot = 25
-# ttl = rr
-# obs_type = 'cases'
-
-
+# ttl = 'IL Overall'
+# 
+# 
 
 
 full_rt_pipeline <- function(df, ## Data frame containing time series of observations
@@ -28,7 +28,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   df$obs <- df[,obscolname]
   df$obs <- round(df$obs)
   df$obs <- na_to_0(df$obs)
-  df$time <- as.numeric(df$date-min(df$date))
+  if(!grepl('time', names(df))) df$time <- as.numeric(df$date-min(df$date))
   stopifnot('obs' %in% colnames(df))
   stopifnot(p_obs >0 & p_obs <= 1)
   
@@ -74,7 +74,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
                        pivot_wider(id_cols = time, 
                                    names_from = 'rep', 
                                    names_prefix = 'infections.', 
-                                   values_from = RL_result),
+                                   values_from = infections.1),
                      p_obs = p_obs, 
                      ww = ww.in,
                      GI_pars = gen_int_pars)
@@ -141,7 +141,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   #                outname),
   #        width = 6, height = 8, dpi = 300, units = 'in')
   
-  return(list(df = df %>% merge(rt_ests$summary %>% mutate(date = min(df$date)+time), by = 'date'),
+  return(list(df = df %>% merge(rt_ests$summary, by = 'date'),
               deconvolved = deconvolved,
               rt_ests = rt_ests,
               master_plot = outplot,

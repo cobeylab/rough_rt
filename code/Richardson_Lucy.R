@@ -47,6 +47,8 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
   ## From the delay multinomial, extract the mean and max delay from infection to observation
   mean_delay <- sum(p_delay * 0:(length(p_delay)-1))
   max_delay <- tail((0:length(p_delay))[p_delay>0], 1)
+  orig_min_t <- min(times)
+  orig_ceiling <- observed[1]*10
   
   ## Get the cumulative probability of a delay <= x days, which we'll use later to adjust for right censoring
   if(right_censor){
@@ -123,6 +125,9 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
     #points(lambda, col = 'red')
     iter = iter+1
   }
+  ## Clean
+  clean_lambda <- function(xx){ifelse(xx>orig_ceiling, 1, xx)}
+  lambda[times<=orig_min_t] = clean_lambda(lambda[times<=orig_min_t])
   ## Return
   if(verbose){print(sprintf('Returning RL after %.0f iterations', iter))}
   data.frame(time = times, imputed = lambda) %>% setNames(c('time', out_col_name))
