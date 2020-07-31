@@ -4,7 +4,14 @@ source('estimate_from_deaths.R')
 
 ## Plot comparison for date of intertest
 ANALYZE_DATE <- Sys.Date()
-cases_rt <- read_csv(sprintf('csv/cases_regional_%s.csv', ANALYZE_DATE)) %>% 
+raw_cases_cr <- read_csv(sprintf('../figs/%s/cases_covid_region.csv', ANALYZE_DATE)) %>%
+  mutate(region = factor(region, levels = as.character(unique(as.numeric(region))))) %>%
+  select(date, region, new_cases, smoothed, contains('rt'))
+cases_overall <- read_rds(sprintf('../figs/%s/overall_estimates_cases.rds', ANALYZE_DATE))$df %>%
+  mutate(region = 'IL Overall') %>%
+  rename(new_cases = obs) %>%
+  select(date, region, new_cases, smoothed, contains('rt'))
+cases_rt_restore_region <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', ANALYZE_DATE)) %>% 
   mutate(obs = 'cases',
          region = toupper(region),
          method = 'full_pipeline',
@@ -14,11 +21,30 @@ cases_rt <- read_csv(sprintf('csv/cases_regional_%s.csv', ANALYZE_DATE)) %>%
          shifted = NA) %>% 
   select(date, region, obs, method, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper) %>%
   filter(date < max(date)-7)
-cases_cori <- read_csv(sprintf('csv/shifted_cases_regional_%s.csv', Sys.Date())) %>% 
+cases_rt_covid_region <- read_csv(sprintf('../figs/%s/cases_covid_region.csv', ANALYZE_DATE)) %>% 
+  mutate(obs = 'cases',
+         region = toupper(region),
+         method = 'full_pipeline',
+         mean_delay = NA,
+         raw = new_cases,
+         smoothed = smoothed,
+         shifted = NA) %>% 
+  select(date, region, obs, method, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper) %>%
+  filter(date < max(date)-7)
+cases_cori_restore_region <- read_csv(sprintf('../figs/%s/shifted_cases_restore_region.csv', ANALYZE_DATE)) %>% 
   mutate(obs = 'cases',
          method = 'shifted_cori',
          mean_delay = mean_delay,
-         region = toupper(restore_region),
+         region = toupper(region),
+         raw = new_cases,
+         smoothed = smoothed,
+         shifted = lead(smoothed, n = round(unique(mean_delay)))) %>% 
+  select(date, region, obs, method, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper)
+cases_cori_covid_region <- read_csv(sprintf('../figs/%s/shifted_cases_covid_region.csv', ANALYZE_DATE)) %>% 
+  mutate(obs = 'cases',
+         method = 'shifted_cori',
+         mean_delay = mean_delay,
+         region = toupper(region),
          raw = new_cases,
          smoothed = smoothed,
          shifted = lead(smoothed, n = round(unique(mean_delay)))) %>% 
@@ -47,7 +73,7 @@ deaths_cori <- read_csv(sprintf('csv/shifted_deaths_regional_%s.csv', Sys.Date()
 #hosp_rt <- read_csv(sprintf('csv/hospitalizations_regional_%s.csv', ANALYZE_DATE)) %>% mutate(kind = 'hospitalizations')
 
 
-bind_rows(cases_rt, deaths_rt) %>%
+bind_rows(cases_rt_restore_region, deaths_rt) %>%
   mutate(region = toupper(region)) %>%
   ggplot()+
   geom_line(aes(x = date, y = rt.mean, color = interaction(obs, method)))+
@@ -56,12 +82,12 @@ bind_rows(cases_rt, deaths_rt) %>%
   geom_vline(aes(xintercept = Sys.Date()), lty = 2)+
   facet_grid(.~region)+
   theme(legend.position = 'bottom')+
-  xlim(c(as_date('2020-04-01'), Sys.Date()))+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   ylab('Rt')+
   ylim(c(0,2.5))+
   scale_color_manual('', values = c('salmon', 'dodgerblue'), aesthetics = c('color', 'fill')) -> case_death
 case_death
-ggsave(plot = case_death, sprintf('../figs/%s/compare_cases_deaths_rt.png', ANALYZE_DATE))
+ggsave(plot = case_death, sprintf('../figs/%s/compare_cases_deaths_rt.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 
 bind_rows(deaths_cori, deaths_rt) %>%
@@ -73,15 +99,15 @@ bind_rows(deaths_cori, deaths_rt) %>%
   geom_vline(aes(xintercept = Sys.Date()), lty = 2)+
   facet_grid(.~region)+
   theme(legend.position = 'bottom')+
-  xlim(c(as_date('2020-04-01'), Sys.Date()))+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   scale_color_manual('', values = c('dodgerblue', 'green'), aesthetics = c('color', 'fill')) +
   ylim(c(0,2.5))+
   ylab('Rt') -> deaht_compare
 deaht_compare
-ggsave(plot = deaht_compare, sprintf('../figs/%s/compare_deaths_rt.png', ANALYZE_DATE))
+ggsave(plot = deaht_compare, sprintf('../figs/%s/compare_deaths_rt.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 
-bind_rows(cases_cori, cases_rt) %>%
+bind_rows(cases_cori_restore_region, cases_rt_restore_region) %>%
   mutate(region = toupper(region)) %>%
   ggplot()+
   geom_line(aes(x = date, y = rt.mean, color = interaction(obs, method)))+
@@ -90,12 +116,49 @@ bind_rows(cases_cori, cases_rt) %>%
   geom_vline(aes(xintercept = Sys.Date()), lty = 2)+
   facet_grid(.~region)+
   theme(legend.position = 'bottom')+
-  xlim(c(as_date('2020-04-01'), Sys.Date()))+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   scale_color_manual('', values = c('salmon', 'yellow'), aesthetics = c('color', 'fill')) +
   ylim(c(0,2.5))+
   ylab('Rt') -> case_compare
 case_compare
-ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_rt.png', ANALYZE_DATE))
+ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+
+## Compare covid region estimates cori vs. pipeline
+# bind_rows(cases_cori_covid_region, cases_rt_covid_region) %>%
+#   mutate(region = toupper(region),
+#          region = factor(region, levels = as.character(unique(as.numeric(region))))) %>%
+#   ggplot()+
+#   geom_line(aes(x = date, y = rt.mean, color = interaction(obs, method)))+
+#   geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper, fill = interaction(obs, method)), alpha = .3)+
+#   geom_hline(aes(yintercept = 1))+
+#   geom_vline(aes(xintercept = Sys.Date()), lty = 2)+
+#   facet_grid(region~.)+
+#   theme(legend.position = 'bottom')+
+#   xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
+#   scale_color_manual('', values = c('salmon', 'yellow'), aesthetics = c('color', 'fill')) +
+#   ylim(c(0,2.5))+
+#   ylab('Rt') -> case_compare_cr
+# case_compare_cr
+bind_rows( cases_rt_covid_region %>%
+             mutate(region = toupper(region),
+                    region = factor(region, levels = as.character(unique(as.numeric(region))))) %>% 
+             select(date, region, contains('rt')),
+           cases_overall  %>% select(date, region, contains('rt'))
+)  %>%
+  ggplot()+
+  geom_line(aes(x = date, y = rt.mean), color = 'magenta4')+
+  geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), fill = 'magenta4', alpha = .3)+
+  geom_hline(aes(yintercept = 1))+
+  geom_vline(aes(xintercept = Sys.Date()), lty = 2)+
+  facet_grid(region~.)+
+  theme(legend.position = 'bottom')+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
+  scale_color_manual('', values = c('salmon', 'yellow'), aesthetics = c('color', 'fill')) +
+  ylim(c(0,2.5))+
+  ylab('Rt') -> case_cr
+case_cr
+ggsave(plot = case_cr, sprintf('../figs/%s/cases_covid_region_rt.png', ANALYZE_DATE), height = 12, width = 3, units = 'in', dpi = 300)
+
 
 
 raw_deaths <- read_csv('csv/dat_deaths_2020-07-29.rds') %>%
@@ -115,15 +178,15 @@ deconvolved_deaths %>%
   geom_line(aes(x = date, y = deconvolved))+
   geom_ribbon(aes(x = date, ymin = dc.lower, ymax = dc.upper), alpha = .2) +
   ylab('new deaths')+
-  xlim(c(as_date('2020-04-01'), Sys.Date()))+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   facet_wrap(.~region, scales = 'free_y', nrow = 1) -> death_dat
-ggsave(plot = death_dat, sprintf('../figs/%s/compare_death_data.png', ANALYZE_DATE))
+ggsave(plot = death_dat, sprintf('../figs/%s/compare_death_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 
 
-raw_cases <- read_csv('csv/dat_cases_2020-07-29.csv') %>%
+raw_cases <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', ANALYZE_DATE)) %>%
   mutate(region = toupper(restore_region))
-deconvolved_cases <- read_rds(sprintf('csv/regional_estimates_cases_%s.rds', ANALYZE_DATE)) %>%
+deconvolved_cases <- read_rds(sprintf('../figs/%s/restore_region_estimates_cases.rds', ANALYZE_DATE)) %>%
   lapply(function(ll) ll$deconvolved) %>% bind_rows(.id = 'region') %>%
   group_by(date, region) %>%
   summarize(deconvolved = mean(total_infections_est, na.rm = T),
@@ -137,15 +200,30 @@ deconvolved_cases %>%
   geom_line(aes(x = date, y = deconvolved))+
   geom_ribbon(aes(x = date, ymin = dc.lower, ymax = dc.upper), alpha = .2) +
   ylab('new cases')+
-  xlim(c(as_date('2020-04-01'), Sys.Date()))+
+  xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   facet_wrap(.~region, scales = 'free_y', nrow = 1) -> case_dat
 case_dat
-ggsave(plot = case_dat, sprintf('../figs/%s/compare_case_data.png', ANALYZE_DATE))
+ggsave(plot = case_dat, sprintf('../figs/%s/compare_case_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 
 
+bind_rows(raw_cases_cr, cases_overall) %>%
+  pivot_longer(c(new_cases, smoothed)) %>%
+  ggplot()+
+  geom_line(aes(x = date, y = value, color = name), show.legend = F)+
+  ylab('cases')+
+  facet_grid(region~., scales = 'free_y') -> cr_case_dat
+ggsave(plot = cr_case_dat, sprintf('../figs/%s/covid_region_case_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+
+
+
+## Plot restore region summary
 cowplot::plot_grid(case_dat, death_dat, case_death, case_compare, deaht_compare, nrow = 5, rel_heights = c(1, 1, 1.5, 1.5, 1.5))
-ggsave(sprintf('../figs/%s/summary_estimates.png', ANALYZE_DATE), width = 9, height = 12, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/summary_restore_region_estimates.png', ANALYZE_DATE), width = 9, height = 12, units = 'in', dpi = 300)
+
+## Plot covid region summary
+cowplot::plot_grid(cr_case_dat, case_cr, ncol = 2)
+ggsave(sprintf('../figs/%s/summary_covid_region_estimates.png', ANALYZE_DATE), width = 8, height = 12, units = 'in', dpi = 300)
 
 
 

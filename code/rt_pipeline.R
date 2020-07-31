@@ -65,7 +65,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
     round %>%
     max(1)
   ww.in = max(min_window, floor(50/low_inf_count))
-  cat(sprintf('\noverall window is %.0f\n', ww.in))
+  cat(sprintf('\nwindow is %.0f\n', ww.in))
   
   
   rt_ests <- rt_boot(infection_ests = deconvolved %>% 

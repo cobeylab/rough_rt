@@ -4,8 +4,7 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                         dat_type, # Can be 'cases', 'deaths' or 'hospitalizations'
                         prior_smoothing_window,
                         debug = FALSE,
-                        output_folder = 'testEpiNow2')
-{
+                        output_folder = 'rough-rt-approach'){
   
   if(!dir.exists(output_folder)){dir.create(output_folder)}
   if(!dir.exists(paste0(output_folder, '/figs'))){dir.create(paste0(output_folder, '/figs'))}
