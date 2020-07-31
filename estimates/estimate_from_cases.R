@@ -23,84 +23,19 @@ source('../code/epinow2.R')
 
 
 ## Load data --------------------------------------------
-min_0 <- function(xx){ifelse(xx<0, 0, xx)}
-
-## IDPH linelist
-## Often dealys to reporting at end of time series
-dat1 <- read_csv('../data/idph_cases_timseries.csv') %>%
-  rename(region = restore_region) %>%
-  filter(region != 'unknown') %>%
-  rename(date = specimen_collection_date) %>%
-  group_by(date, region) %>%
-  summarise(new_cases = sum(new_cases)) %>%
-  ungroup() %>%
-  group_by(region) %>%
-  arrange(date) %>%
-  mutate(smoothed = smooth.spline(new_cases, spar = .5)$y %>% min_0) %>%
-  filter(date <= max(date))
-
-
-## More up to date, public linelist
-raw_dat <- read_csv('../data/idph_public_restore_region.csv') %>%
-  rename(region = restore_region) %>%
-  filter(region != 'unknown') %>%
-  group_by(date, region) %>%
-  summarise(new_cases = sum(new_cases)) %>%
-  mutate(new_cases = ifelse(is.na(new_cases), 0, new_cases),
-         region = toupper(region),
-         region = ifelse(region=='NORTH-CENTRAL', 'NORTHCENTRAL', region)) %>%
-  ungroup() 
-overall_dat <- raw_dat %>%
-  filter(region != 'CHICAGO') %>%
-  group_by(date) %>%
-  summarise(region = 'IL_Overall',
-            new_cases = sum(new_cases))
-dat <- bind_rows(raw_dat, overall_dat) %>%
-  ungroup() %>% group_by(region) %>%
-  arrange(date) %>%
-  mutate(smoothed = smooth.spline(new_cases, spar = .6)$y %>% min_0,
-         avged = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
-  filter(date <= max(date))
-  
-
-## Compare the public and idph linelists
-bind_rows(list(linelist = dat1, public = dat), .id = 'dataset') %>%
-  ggplot()+
-  geom_line(aes(x = date, y = new_cases, color = dataset))+
-  #geom_line(aes(x = date, y = smoothed, color = dataset))+
-  facet_wrap(.~region, scales = 'free_y')+
-  ggtitle('idph cases')
-
+source('../code/load_timeseries.R')
+dat <- load_idph_public_cases_restore_region()
 ## Visualize the case counts by restore region. (4 regions)
 dat %>%
   ggplot()+
   geom_line(aes(x = date, y = new_cases))+
   geom_line(aes(x = date, y = smoothed), color = 'red')+
-  geom_line(aes(x = date, y = avged), color = 'blue')+
+  geom_line(aes(x = date, y = avg_7d), color = 'blue')+
   facet_wrap(.~region, scales = 'free_y')+
   ggtitle('idph cases - public linelist')
 ggsave(sprintf('../figs/%s/cases_restore_region.png', Sys.Date()))
 
-## Load the case counts from the public line list by covid region (11 regions)
-raw_dat_cr <- read_csv('../data/idph_public_covid_region.csv')  %>%
-  rename(region = new_restore_region) %>%
-  filter(region != 'unknown') %>%
-  group_by(date, region) %>%
-  summarise(new_cases = sum(new_cases)) %>%
-  mutate(new_cases = ifelse(is.na(new_cases), 0, new_cases),
-         region = toupper(region)) 
-overall_dat_cr <- raw_dat_cr %>%
-  group_by(date) %>%
-  summarise(region = 'IL_Overall',
-            new_cases = sum(new_cases))
-dat_11r <- bind_rows(raw_dat_cr, overall_dat_cr)%>%
-  ungroup() %>%
-  group_by(region) %>%
-  arrange(date) %>%
-  mutate(smoothed = smooth.spline(new_cases, spar = .6)$y %>% min_0,
-         roll_avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
-  filter(date <= max(date))
-
+dat_11r<-load_idph_public_cases_covid_region()
 dat_11r %>%
   pivot_longer(c(new_cases, smoothed, roll_avg_7d)) %>%
   ggplot()+
@@ -110,7 +45,6 @@ dat_11r %>%
   theme(legend.position = 'bottom')+
   ggtitle('idph cases - public linelist')
 ggsave(sprintf('../figs/%s/cases_covid_region.png', Sys.Date()))
-
 
 
 
