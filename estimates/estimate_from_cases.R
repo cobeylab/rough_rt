@@ -17,7 +17,6 @@ source('../code/deconvolve.R')
 source('../code/Richardson_Lucy.R')
 source('../code/upscale.R')
 source('../code/rt_boot.R')
-source('../code/epinow2.R')
 
 
 
@@ -37,11 +36,11 @@ ggsave(sprintf('../figs/%s/cases_restore_region.png', Sys.Date()))
 
 dat_11r<-load_idph_public_cases_covid_region()
 dat_11r %>%
-  pivot_longer(c(new_cases, smoothed, roll_avg_7d)) %>%
+  pivot_longer(c(new_cases, smoothed, avg_7d)) %>%
   ggplot()+
   geom_line(aes(x = date, y = value, color = name))+
   facet_wrap(.~region, scales = 'free_y')+
-  scale_color_manual("", values = c('black', 'red', 'yellow'))+
+  scale_color_manual("", values = c('cyan', 'darkblue', 'yellow'))+
   theme(legend.position = 'bottom')+
   ggtitle('idph cases - public linelist')
 ggsave(sprintf('../figs/%s/cases_covid_region.png', Sys.Date()))
@@ -52,9 +51,9 @@ ggsave(sprintf('../figs/%s/cases_covid_region.png', Sys.Date()))
 rt_by_region <- function(rr, dat){
   cat(sprintf('restore region is %s\n', rr))
   out = full_rt_pipeline(df = dat %>% filter(region == rr), 
-                         obscolname ='smoothed',
+                         obscolname ='avg_7d',
                          p_obs = .15,
-                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_test_posterior.rds') %>% bind_cols %>% select(1:2),
+                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2),
                          delay_type = 'lognormal',
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
                          nboot = 25, 
@@ -63,6 +62,8 @@ rt_by_region <- function(rr, dat){
   sprintf('%s - done\n', rr)
   return(out)
 }
+
+
 ## 1. by restore(4) region ------------------------------
 #Takes a few minutes to run, depending on size of nboot
 #Can't be parallelized because internal operations are already running in parallel
@@ -83,55 +84,16 @@ pdf(file = sprintf('../figs/%s/covid_region_rt_from_idph_cases.pdf', Sys.Date())
 lapply(covid_region_estimates, function(ll) cowplot::plot_grid(ll$upscale_plot + theme(legend.position = c(.8, .8)), ll$rt_plot, ncol = 1)) 
 dev.off()
 
-# 
-#  
-# ## Estimate Rt overall ----------------------------------
-# rt_overall <- function(rr){
-#   sprintf('restore region is %s', rr)
-#  out = full_rt_pipeline(df = dat %>% filter(region != 'CHICAGO') %>% group_by(date) %>% 
-#                           summarise(smoothed = sum(smoothed, na.rm = T)), 
-#                    obscolname ='smoothed',
-#                    p_obs = .9,
-#                    delay_pars = read_rds('../data/fitted_delays/delay_infection_to_test_posterior.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2),
-#                    delay_type = 'lognormal',
-#                    gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
-#                    nboot = 25, 
-#                    ttl = 'IL Overall', obs_type = 'cases')
-#  sprintf('%s - done\n', rr)
-# return(out)
-# }
-# 
-# overall_estimates <- rt_overall(dat)
-# 
-# ## Plot
-# cowplot::plot_grid(overall_estimates$upscale_plot + theme(legend.position = c(.8, .8)), overall_estimates$rt_plot, ncol = 1)
-# ggsave(width = 4, height = 3, filename = sprintf('../figs/%s/Illinois_rt_from_idph_cases.png', Sys.Date()), dpi = 300)
-# 
-
-
-
-
-
 
 
 ## Estimate using the raw, shifted tim series ----------------------------
 cori_by_region <- function(rr, dat){
-  
-  if(rr != 'overall'){
-    ## Subset and reformat the data frame
+
     ins <- filter(dat, region == rr) %>% 
       ungroup() %>%
       arrange(date) %>%
       mutate(time = 1:nrow(.)) # Create a numeric time column
-  }else{
-    ins <- filter(dat, region != 'CHICAGO') %>% 
-      group_by(date) %>%
-      summarise(smoothed = sum(smoothed)) %>%
-      ungroup() %>%
-      arrange(date) %>%
-      mutate(time = 1:nrow(.)) # Create a numeric time column
     
-  }
    
   ## Calculate the appropriate window size
   ##   This is kind of arbitrary, but it scales with the 20th percentile of daily sample size
@@ -139,7 +101,7 @@ cori_by_region <- function(rr, dat){
   cat(sprintf('\nregion is %s, window is %.0f\n', rr, ww))
   
   ## Calculate the mean delay
-  md = read_rds('../data/fitted_delays/delay_infection_to_test_posterior.rds') %>% bind_cols %>% select(1:2) %>% 
+  md = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2) %>% 
     mutate(mean = exp(mu+sigma^2/2)) %>% 
     pull(mean) %>% 
     mean
@@ -186,18 +148,3 @@ write_rds(restore_region_estimates, sprintf('../figs/%s/restore_region_estimates
 write_rds(covid_region_estimates, sprintf('../figs/%s/covid_region_estimates_cases.rds', Sys.Date()))
 #write_rds(overall_estimates, sprintf('../figs/%s/overall_estimates_cases.rds', Sys.Date()))
 #write_csv(dat, sprintf('../figs/%s/dat_cases.csv', Sys.Date()))
-
-# 
-# ## Estimate rt using epinow2
-# library('EpiNow2')
-# get_overall <- function(dat){
-#   dat %>% filter(restore_region != 'CHICAGO') %>% 
-#     group_by(date) %>% 
-#     summarise(new_cases = sum(new_cases),
-#               smoothed = sum(smoothed))
-# }
-# run_epinow2(dat_df = get_overall(dat), 
-#             obs_colname = 'new_cases', 
-#             dat_type = 'cases', 
-#             prior_smoothing_window = 7, 
-#             output_folder = 'test_epinow2')

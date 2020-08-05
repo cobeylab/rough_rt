@@ -46,6 +46,8 @@ fit_gamma_stan <- function(
     model, model_input_data, chains = chains, cores = cores,
     ...
   )
+  
+  
 }
 ```
 

@@ -1,0 +1,160 @@
+---
+title: "Delay infection to report"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(truncnorm)
+theme_set(theme_bw())
+```
+
+
+## Fit the delay from onset to testing to carline data
+```{r}
+cldat <- data_frame(n = c(194, 328, 130), delay = c('<3', '3-7', '>=7'))
+
+test_delay_fit <- optim(par = c(shape = 1/2, rate = 1/2), 
+      fn = function(pars, counts){
+  nls = -(counts[1]*log(pgamma(q = 3, shape = pars['shape'], rate = pars['rate'])) +
+         counts[2]* log(pgamma(7, shape = pars['shape'], rate = pars['rate']) - pgamma(q = 3, shape = pars['shape'], rate = pars['rate'])) +
+    counts[3]*log(1-pgamma(7, shape = pars['shape'], rate = pars['rate']))
+  )
+}, counts = cldat$n)
+
+```
+
+```{r}
+get_shape_rate <- function(mean, sd){
+  rate = mean/(sd^2)
+  shape = mean*rate
+  c(shape, rate)
+}
+
+get_mu_sigma <- function(mean, sd){
+  mu = log(mean^2/(sqrt(sd^2+mean^2)))
+  sigma = sqrt(log((sd^2)/(mean^2)+1))
+  c(mu, sigma)
+}
+
+nn = 100
+## Generate synthetic incubation times
+del_inf_to_onset <- rlnorm(nn, get_mu_sigma(5.6, 3.9)[1], get_mu_sigma(5.6, 3.9)[2])  # From Linton et al
+d_inc <- function(nn){dlnorm(nn, get_mu_sigma(5.6, 3.9)[1], get_mu_sigma(5.6, 3.9)[2])}
+mean(del_inf_to_onset); sd(del_inf_to_onset)
+
+## Estimated delay from onset to test
+del_onset_to_test <- rgamma(nn, shape = test_delay_fit$par[1], rate = test_delay_fit$par[2])
+d_test <- function(nn){dgamma(nn, test_delay_fit$par[1], test_delay_fit$par[2])}
+  
+## Assumed reporting delay
+del_test_to_report <- truncnorm::rtruncnorm(nn, a = 0, b = Inf, mean = 4, sd = 2)
+d_report <- function(nn){ truncnorm::dtruncnorm(nn, a = 0, b = Inf, mean = 4, sd = 2) }
+
+## Total delay
+delay_vec <- del_inf_to_onset + del_onset_to_test + del_test_to_report
+mean(delay_vec); sd(delay_vec)
+```
+
+
+
+## Fit the full delay to a gamma
+```{r}
+fit_stan <- function(
+  mod = 'fit_gamma.stan',
+  delays, # vector of delay for each individual in the data
+  chains = 1, # Number of MCMC chains to run
+  cores = parallel::detectCores(logical = FALSE),
+  ...
+) {
+  library(rstan)
+  
+  model <- stan_model(mod)
+  
+  N <- length(delays)
+  model_input_data <- list(
+    N = N,
+    x = delays
+  )
+  
+  fit <- sampling(
+    model, model_input_data, chains = chains, cores = cores,
+    ...
+  )
+  
+  
+}
+```
+
+```{r}
+fit_stan(mod = '../../code/fit_lognormal.stan', 
+               delays = delay_vec, 
+               chains = 4) -> fits
+```
+
+## Extract_fits
+```{r}
+params<-rstan::extract(fits)
+
+params %>% as.data.frame() %>%
+  select(mu, sigma) %>%
+  pivot_longer(everything())%>%
+  ggplot()+
+  geom_density(aes(x = value, fill = name), alpha = .5, show.legend = FALSE) +
+  facet_wrap(.~name, nrow = 2, scales = 'free')+
+  ggtitle('Posterior parameter estimates for lognormal distribution')
+```
+
+## Plot bivariate posterior
+```{r}
+params %>% as.data.frame() %>%
+  select(mu, sigma) %>%
+  mutate(mean = exp(mu+sigma^2/2),
+         var = (exp(sigma^2)-1)*exp(2*mu+sigma^2)) -> post
+
+post %>%
+  ggplot()+
+  geom_point(aes(x = mu, y = sigma), alpha = .5, color = 'dodgerblue')
+  ggtitle('Posterior shape vs rate')
+  
+post %>%
+  ggplot()+
+  geom_point(aes(x = mean, y = var), alpha = .5, color = 'seagreen')
+  ggtitle('Posterior mean vs var')
+  
+colMeans(post)
+```
+
+## Plot delay components
+```{r}
+xx = seq(0, 30, by = .1)
+cowplot::plot_grid(
+  ggplot(data_frame(days = xx, dens = d_inc(xx))) + geom_line(aes(x = days, y = dens)) + ggtitle('Incubation', subtitle = 'From Linton et al., 2020\nlognormal, mean 5.6, var 3.9'),
+  ggplot(data_frame(days = xx, dens = d_test(xx))) + geom_line(aes(x = days, y = dens)) + ggtitle('Onset to testing', subtitle = 'Fitted to carline data\ngamma, mean 4.84, var 8.49'),
+  ggplot(data_frame(days = xx, dens = d_report(xx))) + geom_line(aes(x = days, y = dens)) + ggtitle('Testing to report', subtitle = 'Assumed\ntruncated normal - min=0, mean = 4, sd = 2'),
+  nrow = 3
+) -> component_delays
+component_delays
+```
+
+## Plot against data
+```{r}
+xx = seq(0, 30, by = .1)
+mapply(function(mu, sigma){pgamma(xx, mu, sigma)}, mu = params$mu, sigma = params$sigma) %>%
+  apply(MARGIN = 1, function(vv){c(lower = quantile(vv, .025), med = quantile(vv, .5), upper = quantile(vv, .975 ))}) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(delay = xx) %>%
+  ggplot() +
+  geom_ribbon(aes(x = delay, ymin = `lower.2.5%`, ymax = `upper.97.5%`), fill = 'seagreen', color = 'seagreen', alpha = .5) +
+  ylab('cumulative density')+
+  ggtitle('Total delay infection to report', subtitle = 'lognormal, mean 13.63, var 29.14') -> total_delay
+
+cowplot::plot_grid(total_delay, component_delays, ncol = 2)
+ggsave('../../figs/delays/infectino_to_report.png', height = 7, width = 9, dpi = 300)
+```
+```{r}
+write_rds(params, 'delay_infection_to_report_posterior.rds')
+```
+

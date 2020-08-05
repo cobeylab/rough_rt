@@ -1,10 +1,17 @@
 ## Estimate with epinow2
-region.in = commandArgs()[1]
 outpath = '../epinow2_estimates'
-dt <- Sys.Date()
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+source('../code/util.R')
+dt <- lubridate::as_date('2020-07-31')
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
-source('../code/util.R')
+
 
 
 ## Load data --------------------------------------------
@@ -29,15 +36,20 @@ ggsave(sprintf('%s/%s/cases_input.png', outpath, Sys.Date()))
 library('EpiNow2')
 source('../code/epinow2.R')
 get_region <- function(rr){
-  regions = unique(dat$region)
-  dat %>% filter(region == regions[rr]) %>%
+  dat %>% filter(region == rr) %>%
     group_by(date) %>%
     summarise(new_cases = sum(new_cases),
               smoothed = sum(smoothed))
 }
-sprintf('Running for region %s', region.in)
-run_epinow2(dat_df = get_region(region.in),
-            obs_colname = 'new_cases',
-            dat_type = 'cases',
-            prior_smoothing_window = 7,
-            output_folder = sprintf('%s/%s', outpath, dt))
+regions = unique(dat$region)
+regions = regions[-c(1:7)]
+
+for(region.in in regions){
+  cat(sprintf('Running for region %s', region.in))
+  dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
+  run_epinow2(dat_df = get_region(region.in),
+              obs_colname = 'new_cases',
+              dat_type = 'cases',
+              prior_smoothing_window = 7,
+              output_folder = sprintf('%s/%s', outpath, region.in))
+}

@@ -1,0 +1,214 @@
+---
+title: "Fit delay from infection to death"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(rstan)
+```
+
+
+## Import data from Hong Kong
+
+```{r}
+check_dates <- function(dates){
+  dates[!grepl(x = dates, pattern = '\\d\\d?/\\d\\d?/\\d\\d')]
+}
+is_valid_date <- function(dates){
+  grepl(x = dates, pattern = '\\d\\d?/\\d\\d?/\\d\\d')
+}
+clean_dates_onset <- function(chdate){
+  data_frame(chdate = chdate) %>%
+    separate(chdate, into = c('month', 'day', 'year'), sep = '/') %>%
+    mutate(date = lubridate::as_date(sprintf('20%02i-%02i-%02i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
+    pull(date)
+}
+clean_dates_hosp <- function(chdate){
+  data_frame(chdate = chdate) %>%
+    separate(chdate, into = c('day', 'month', 'year'), sep = '/') %>%
+    mutate(date = lubridate::as_date(sprintf('%04i-%02i-%02i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
+    pull(date)
+}
+
+## Delay from onset to hospitalization from HK data
+hkdat <- read_csv('../HK_data/data_24July.csv',
+                              col_types = "iiffffff") %>%
+  setNames(c('id', 'age', 'sex', 'onset', 'hospital', 'isolation', 'discharge', 'death')) %>%
+  select(onset, hospital) %>%
+  filter(is_valid_date(onset) & is_valid_date(hospital)) %>%
+  mutate(onset = clean_dates_onset(onset),
+         hospital = clean_dates_hosp(hospital),
+         delay = hospital-onset)
+
+
+hkdat %>%
+  ggplot() +
+  geom_histogram(aes(x = delay), binwidth = 1)
+```
+
+
+```{r}
+  get_shape_rate <- function(mean, vv){
+    rate = mean/vv
+    shape = mean*rate
+    # stopifnot(shape/rate == mean)
+    # stopifnot(shape/rate^2 == vv)
+    c(shape, rate)
+  }
+
+## Empirical delay from onset to hosp
+del_onset_to_hosp_hk <- hkdat %>% filter(delay >=0) %>% pull(delay)
+del_onset_to_hosp_Nishiura <- c(
+                                rgamma(n = length(del_onset_to_hosp_hk)*.1, get_shape_rate(mean = 3.3, vv = 4.2^2)[1], get_shape_rate(3.3, 4.2^2)[2])) # Deceased (10%)
+
+## Generate synthetic incubation times
+del_inf_to_onset <- rgamma(n = length(del_onset_to_hosp_hk), shape = 5.807, scale = 0.948) # From Lauer et al. 2020
+
+delay_vec_hk <- as.numeric(del_inf_to_onset + del_onset_to_hosp_hk)
+delay_vec_ni <- as.numeric(del_inf_to_onset + del_onset_to_hosp_Nishiura)
+```
+## Fit gamma distribution
+```{r}
+sprintf('mean delay from infection to hospital in hk is %.2f d', mean(delay_vec_hk))
+sprintf('mean delay from infection to hospital based on Linton et al is %.2f d', mean(delay_vec_ni))
+```
+
+###
+```{r}
+fit_stan <- function(
+  mod = 'fit_gamma.stan',
+  del_vec, # vector of delay for each individual in the data
+  chains = 1, # Number of MCMC chains to run
+  cores = parallel::detectCores(logical = FALSE),
+  ...
+) {
+  library(rstan)
+  
+  model <- stan_model(mod)
+  
+  N <- length(del_vec)
+  model_input_data <- list(
+    N = N,
+    x = del_vec
+  )
+  
+  fit <- sampling(
+    model, model_input_data, chains = chains, cores = cores,
+    ...
+  )
+}
+```
+
+
+```{r}
+fit_stan(mod = '../../code/fit_lognormal.stan', 
+               del_vec = delay_vec_hk, 
+               chains = 4) -> fit_lnormal_hk
+```
+
+```{r}
+fit_stan(mod = '../../code/fit_lognormal.stan', 
+               del_vec = delay_vec_ni, 
+               chains = 4) -> fit_lnormal_ni
+```
+
+
+## Extract lognormal fits
+```{r}
+params_lognormal_hk <- rstan::extract(fit_lnormal_hk)
+params_lognormal_ni <- rstan::extract(fit_lnormal_ni)
+```
+
+```{r}
+pairs(fit_lnormal_hk, pars = c("mu", "sigma", "lp__"), las = 1)
+print(fit_lnormal_hk, pars = c('mu', 'sigma'))
+```
+
+
+```{r}
+pairs(fit_lnormal_ni, pars = c("mu", "sigma", "lp__"), las = 1)
+print(fit_lnormal_ni, pars = c('mu', 'sigma'))
+```
+
+## Plot against data
+```{r}
+wait <- data.frame(wait = floor(delay_vec_ni)) %>%
+  group_by(wait) %>%
+  summarise(count = n()) %>%
+   mutate(kind = 'ni')
+
+wait %>%
+  ggplot() +
+  geom_bar(aes(x = wait, y = count), stat = 'identity')+
+  facet_grid(.~kind)
+ 
+
+
+post_ni <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length(delay_vec_ni), 
+                         mm = params_lognormal_ni$mu,
+                         ss = params_lognormal_ni$sigma) %>%
+  apply(MARGIN = 1, FUN = function(xx) data.frame(lower = quantile(xx, .025),
+                                                  med = quantile(xx, .5),
+                                                  upper = quantile(xx, .975))) %>%
+  bind_rows() %>%
+  mutate(wait = wait_df$wait)
+
+
+
+bind_rows(list(
+  lognormal = post_ni
+), .id = 'dist') %>%
+  merge(wait, by = 'wait') %>%
+  ggplot()+
+  geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
+  geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
+  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
+  ggtitle('Delay from infection to testing', subtitle = sprintf('Empirical mean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(delay_vec_ni), var(delay_vec_ni), mean(params_lognormal_ni$mu), mean(params_lognormal_ni$sigma)))
+```
+
+
+```{r}
+wait <- data.frame(wait = floor(delay_vec_hk)) %>%
+  group_by(wait) %>%
+  summarise(count = n()) %>%
+   mutate(kind = 'hk')
+
+wait %>%
+  ggplot() +
+  geom_bar(aes(x = wait, y = count), stat = 'identity')+
+  facet_grid(.~kind)
+ 
+
+
+post_hk <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length(delay_vec_hk), 
+                         mm = params_lognormal_hk$mu,
+                         ss = params_lognormal_hk$sigma) %>%
+  apply(MARGIN = 1, FUN = function(xx) data.frame(lower = quantile(xx, .025),
+                                                  med = quantile(xx, .5),
+                                                  upper = quantile(xx, .975))) %>%
+  bind_rows() %>%
+  mutate(wait = wait_df$wait)
+
+
+
+bind_rows(list(
+  lognormal = post_hk
+), .id = 'dist') %>%
+  merge(wait, by = 'wait') %>%
+  ggplot()+
+  geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
+  geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
+  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
+  ggtitle('Delay from infection to testing', subtitle = sprintf('Empirical mean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(delay_vec_hk), var(delay_vec_hk), mean(params_lognormal_hk$mu), mean(params_lognormal_hk$sigma)))
+```
+
+## Save the posterior
+```{r}
+write_rds(params_lognormal_hk, 'delay_infection_to_hosp_posterior.rds')
+```
+
