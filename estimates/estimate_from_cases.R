@@ -58,7 +58,8 @@ rt_by_region <- function(rr, dat){
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
                          nboot = 25, 
                          ttl = rr, 
-                         obs_type = 'cases')
+                         obs_type = 'cases',
+                         min_window = 5)
   sprintf('%s - done\n', rr)
   return(out)
 }
