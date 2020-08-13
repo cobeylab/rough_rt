@@ -168,3 +168,5 @@ get_rate <- function(mean, vv){
   shape = mean*rate
   rate
 }
+
+dir_check <- function(dirname) if(!dir.exists(dirname)) dir.create(dirname)

@@ -28,7 +28,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   df$obs <- df[,obscolname]
   df$obs <- round(df$obs)
   df$obs <- na_to_0(df$obs)
-  if(!grepl('time', names(df))) df$time <- as.numeric(df$date-min(df$date))
+  if(!any(grepl('time', names(df)))) df$time <- as.numeric(df$date-min(df$date))
   stopifnot('obs' %in% colnames(df))
   stopifnot(p_obs >0 & p_obs <= 1)
   
@@ -136,12 +136,18 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
                                upscale_plot+theme(legend.position = 'none'), nrow = 1), 
                      delplot,
                      rt_plot, nrow = 4, ncol = 1)
-  # ggsave(sprintf('testfigs/%s/%s.png',
-  #                outdir,
-  #                outname),
-  #        width = 6, height = 8, dpi = 300, units = 'in')
+
+  c_p_obs<-data_frame(dd = 0:40) %>%
+    mutate(p_report = plnorm(dd, median(delay_pars$mu), median(delay_pars$sigma))) 
   
-  return(list(df = df %>% merge(rt_ests$summary, by = 'date'),
+   clip_end_dates <- c('clip.50' = filter(c_p_obs, p_report <= .5)%>%tail(1)%>%pull(dd),
+                       'clip.90' = filter(c_p_obs, p_report <= .9)%>%tail(1)%>%pull(dd))
+  
+  df %>% merge(rt_ests$summary, by = c('date', 'time')) %>%
+    mutate(robustness = ifelse(date <= (max(date)-clip_end_dates['clip.90']), 'robust', 
+                                ifelse(date <= (max(date)-clip_end_dates['clip.50']), 'partial data', 'unreliable'))) -> outs
+  
+  return(list(df = outs,
               deconvolved = deconvolved,
               rt_ests = rt_ests,
               master_plot = outplot,
