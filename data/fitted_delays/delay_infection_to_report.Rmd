@@ -156,5 +156,6 @@ ggsave('../../figs/delays/infectino_to_report.png', height = 7, width = 9, dpi =
 ```
 ```{r}
 write_rds(params, 'delay_infection_to_report_posterior.rds')
+write.csv(get_discrete_lognormal(0:30, median(params$mu), median(params$sigma)), 'discrete_delay_infection_to_report.csv')
 ```
 
