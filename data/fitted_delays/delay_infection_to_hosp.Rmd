@@ -8,6 +8,7 @@ output: html_notebook
 library(tidyverse)
 library(cowplot)
 library(rstan)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 
@@ -46,10 +47,11 @@ hkdat <- read_csv('../HK_data/data_24July.csv',
 
 hkdat %>%
   ggplot() +
-  geom_histogram(aes(x = delay), binwidth = 1)
+  geom_histogram(aes(x = delay), binwidth = 1) +
+  ggtitle('HK delays onset to hospital')
 ```
 
-
+## Drop negative delays for fitting.
 ```{r}
   get_shape_rate <- function(mean, vv){
     rate = mean/vv
@@ -61,6 +63,12 @@ hkdat %>%
 
 ## Empirical delay from onset to hosp
 del_onset_to_hosp_hk <- hkdat %>% filter(delay >=0) %>% pull(delay)
+```
+
+## Also compare to reported delay from onset to hospitalization from Nishiura et al.
+--> Focus on living 
+--> Longer for deceased (mean of 24 days)
+```{r}
 del_onset_to_hosp_Nishiura <- c(
                                 rgamma(n = length(del_onset_to_hosp_hk)*.1, get_shape_rate(mean = 3.3, vv = 4.2^2)[1], get_shape_rate(3.3, 4.2^2)[2])) # Deceased (10%)
 
@@ -75,6 +83,7 @@ delay_vec_ni <- as.numeric(del_inf_to_onset + del_onset_to_hosp_Nishiura)
 sprintf('mean delay from infection to hospital in hk is %.2f d', mean(delay_vec_hk))
 sprintf('mean delay from infection to hospital based on Linton et al is %.2f d', mean(delay_vec_ni))
 ```
+
 
 ###
 ```{r}
@@ -122,11 +131,13 @@ params_lognormal_hk <- rstan::extract(fit_lnormal_hk)
 params_lognormal_ni <- rstan::extract(fit_lnormal_ni)
 ```
 
+## Hong Kong Results
 ```{r}
 pairs(fit_lnormal_hk, pars = c("mu", "sigma", "lp__"), las = 1)
 print(fit_lnormal_hk, pars = c('mu', 'sigma'))
 ```
-
+## Linton et al. 2020 results
+(living)
 
 ```{r}
 pairs(fit_lnormal_ni, pars = c("mu", "sigma", "lp__"), las = 1)
@@ -135,15 +146,15 @@ print(fit_lnormal_ni, pars = c('mu', 'sigma'))
 
 ## Plot against data
 ```{r}
-wait <- data.frame(wait = floor(delay_vec_ni)) %>%
+wait_df <- data.frame(wait = floor(delay_vec_ni)) %>%
   group_by(wait) %>%
   summarise(count = n()) %>%
    mutate(kind = 'ni')
 
-wait %>%
-  ggplot() +
-  geom_bar(aes(x = wait, y = count), stat = 'identity')+
-  facet_grid(.~kind)
+# wait %>%
+#   ggplot() +
+#   geom_bar(aes(x = wait, y = count), stat = 'identity')+
+#   facet_grid(.~kind)
  
 
 
@@ -166,8 +177,8 @@ bind_rows(list(
   geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
   geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
   geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
-  ggtitle('Delay from infection to testing', subtitle = sprintf('Empirical mean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
-          mean(delay_vec_ni), var(delay_vec_ni), mean(params_lognormal_ni$mu), mean(params_lognormal_ni$sigma)))
+  ggtitle('Linton (living): Delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(del_onset_to_hosp_Nishiura), mean(delay_vec_ni), var(delay_vec_ni), mean(params_lognormal_ni$mu), mean(params_lognormal_ni$sigma)))
 ```
 
 
@@ -177,10 +188,10 @@ wait <- data.frame(wait = floor(delay_vec_hk)) %>%
   summarise(count = n()) %>%
    mutate(kind = 'hk')
 
-wait %>%
-  ggplot() +
-  geom_bar(aes(x = wait, y = count), stat = 'identity')+
-  facet_grid(.~kind)
+# wait %>%
+#   ggplot() +
+#   geom_bar(aes(x = wait, y = count), stat = 'identity')+
+#   facet_grid(.~kind)
  
 
 
@@ -203,8 +214,8 @@ bind_rows(list(
   geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
   geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
   geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
-  ggtitle('Delay from infection to testing', subtitle = sprintf('Empirical mean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
-          mean(delay_vec_hk), var(delay_vec_hk), mean(params_lognormal_hk$mu), mean(params_lognormal_hk$sigma)))
+  ggtitle('HK: delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(del_onset_to_hosp_hk), mean(delay_vec_hk), var(delay_vec_hk), mean(params_lognormal_hk$mu), mean(params_lognormal_hk$sigma)))
 ```
 
 ## Save the posterior

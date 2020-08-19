@@ -87,7 +87,7 @@ dev.off()
 
 
 
-## Estimate using the raw, shifted tim series ----------------------------
+## Estimate using the raw, shifted time series ----------------------------
 cori_by_region <- function(rr, dat){
 
     ins <- filter(dat, region == rr) %>% 

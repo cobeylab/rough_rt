@@ -5,9 +5,6 @@
 ## 2. Source the script 'estimate_from_cases.R'. Rt estimates for each covid region, each restore region and IL_Overall will be saved to a .csv in the directory ../figs/TODAYS-DATE
 ## 3. Run the rest of the code in this script to generate figures. Figures will save to the same directory as in 2.
 
-
-
-
 ##  Estimates are saved to a directory labeled by the date on which they were generated in the ../figs/ directory
 source('estimate_from_cases.R')
 
