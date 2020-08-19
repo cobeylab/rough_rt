@@ -104,7 +104,6 @@ case_compare
 ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 # ## Load epinow2 estimates
-# ymn = .25; ymx = 3.5;
 # load_epinow2 <- function(region){
 # read_rds(sprintf('~/R/rough-rt-approach/epinow2_estimates/%s/latest/summarised_estimates.rds', region)) %>%
 #   mutate(region = region)
@@ -114,6 +113,7 @@ ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.
 
 ## RESTORE REGION ------------------------
 ##  Plot cases vs. deconvolved cases
+ymn = .25; ymx = 3.5;
 raw_cases <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', ANALYZE_DATE)) %>%
   mutate(region = toupper(region))
 deconvolved_cases <- read_rds(sprintf('../figs/%s/restore_region_estimates_cases.rds', ANALYZE_DATE)) %>%
@@ -137,7 +137,7 @@ ggsave(plot = case_dat, sprintf('../figs/%s/compare_case_data.png', ANALYZE_DATE
 
 ## Plot restore region summary
 cowplot::plot_grid(case_dat, death_dat, case_death, case_compare, deaht_compare, nrow = 5, rel_heights = c(1, 1, 1.5, 1.5, 1.5))
-ggsave(sprintf('../figs/%s/summary_restore_region_estimates.png', ANALYZE_DATE), width = 9, height = 12, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/summary_restore_region_estimates.png', ANALYZE_DATE), width = 9, height = 2.5, units = 'in', dpi = 300)
 
 
 
@@ -187,9 +187,9 @@ raw_cases_cr %>%
   
 }
 plot_cr_data(as.character(1:6))
-ggsave(sprintf('../figs/%s/covid_region_1-6_case_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/covid_region_1-6_case_data.png', ANALYZE_DATE), width = 2.5, height = 9, units = 'in', dpi = 300)
 plot_cr_rt(c(as.character(7:11), 'IL_Overall'))
-ggsave(sprintf('../figs/%s/covid_region_7-Overall_case_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/covid_region_7-Overall_case_data.png', ANALYZE_DATE), width = 2.5, height = 9, units = 'in', dpi = 300)
 
 
 

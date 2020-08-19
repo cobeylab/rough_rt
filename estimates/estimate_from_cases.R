@@ -32,7 +32,7 @@ dat %>%
   geom_line(aes(x = date, y = avg_7d), color = 'blue')+
   facet_wrap(.~region, scales = 'free_y')+
   ggtitle('idph cases - public linelist')
-ggsave(sprintf('../figs/%s/cases_restore_region.png', Sys.Date()))
+ggsave(sprintf('../figs/%s/cases_restore_region.png', Sys.Date()), height = 4, width = 7, units = 'in', dpi = 300)
 
 dat_11r<-load_idph_public_cases_covid_region()
 dat_11r %>%
@@ -43,7 +43,7 @@ dat_11r %>%
   scale_color_manual("", values = c('cyan', 'darkblue', 'yellow'))+
   theme(legend.position = 'bottom')+
   ggtitle('idph cases - public linelist')
-ggsave(sprintf('../figs/%s/cases_covid_region.png', Sys.Date()))
+ggsave(sprintf('../figs/%s/cases_covid_region.png', Sys.Date()), , height = 6, width = 7, units = 'in', dpi = 300)
 
 
 
