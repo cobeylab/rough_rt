@@ -97,7 +97,7 @@ bind_rows(cases_cori_restore_region, cases_rt_restore_region) %>%
   facet_grid(.~region)+
   theme(legend.position = 'bottom')+
   xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
-  scale_color_manual('', values = c('salmon', 'yellow'), aesthetics = c('color', 'fill')) +
+  scale_color_manual('', values = c('salmon', 'blue3'), aesthetics = c('color', 'fill')) +
   ylim(c(0,2.5))+
   ylab('Rt') -> case_compare
 case_compare
