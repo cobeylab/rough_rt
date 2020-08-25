@@ -30,8 +30,7 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
                    max_iter = 50,
                    out_col_name = 'RL_result',
                    right_censor = TRUE,
-                   verbose = FALSE,
-                   ww = 0){
+                   verbose = FALSE){
   
   ## Check inputs
   stopifnot(is.vector(observed) & is.vector(times) & is.vector(p_delay))
@@ -113,14 +112,6 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
                      obs = observed, 
                      expected = expected_D)
     lambda = lambda_unsmoothed
-    if(ww>0){
-    wts = choose(ww, 0:ww)/(2^ww)
-    #lambda = lambda_unsmoothed = rnorm(100)
-    for(ii in (ww/2+1):(length(lambda)-ww/2-1)){
-      inds <- max(1, ii-ww/2):min(length(lambda_unsmoothed), ii+ww/2)
-      lambda[ii] = sum(lambda_unsmoothed[inds]*wts)
-    }
-    }
     #plot(lambda_unsmoothed)
     #points(lambda, col = 'red')
     iter = iter+1
