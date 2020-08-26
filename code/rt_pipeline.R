@@ -1,6 +1,5 @@
-# df = dat %>% filter(restore_region != 'chicago') %>% group_by(date) %>% 
-#   summarise(new_deaths = sum(new_deaths, na.rm = T))
-# obscolname ='new_deaths'
+# df <- dat %>% filter(region == 'CHICAGO')
+# obscolname ='new_cases'
 # p_obs = .9
 # delay_pars = read_rds('../data/fitted_delays/Linton_lognorm_sample.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2)
 # delay_type = 'lognormal'
@@ -43,24 +42,27 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   
   ## 3. Use RL to infer times of infection given the posterior parms of the delay
-  deconvolved <- deconvolve(df$obs, times = df$time, delay_posterior = delay_pars, nboot = nboot, delay_type = delay_type) 
+  deconvolved <- deconvolve(df$obs, times = df$time, delay_posterior = delay_pars, delay_type = delay_type, n_samples = 10, n_burn_in = 5) 
   
   ## 4. Upscale from deconvolved times of infection to total infections based on p_obs
   deconvolved <- lapply(deconvolved, FUN = function(df.in) {
     est_total_inf(df.in, 
-                  p_obs = p_obs, 
-                  obs_colname = 'RL_result',
-                  n_replicates = 1) 
+                  p_obs = p_obs) 
   }
   )
+  
+  deconvolved <- deconvolved %>% lapply(FUN = function(ll) pivot_longer(ll, -1, names_to = 'chain', values_to = 'infections')) %>%
+    bind_rows(.id = 'pset') %>%
+    mutate(rep = as.numeric(as.factor(paste0(pset, chain)))) %>%
+    dplyr::select(time, rep, infections)
   
 
 
   
   ## 5. Estimate Rt
   ## Calculate the window size
-  low_inf_count = filter(bind_rows(deconvolved), RL_result>0 & !is.na(RL_result)) %>%
-    pull(RL_result) %>%
+  low_inf_count = filter(deconvolved, infections>0 & !is.na(infections)) %>%
+    pull(infections) %>%
     quantile(.2) %>%
     round %>%
     max(1)
@@ -69,12 +71,11 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   
   rt_ests <- rt_boot(infection_ests = deconvolved %>% 
-                       bind_rows(.id = 'rep') %>% 
-                       mutate(RL_result = round(RL_result)) %>%
                        pivot_wider(id_cols = time, 
                                    names_from = 'rep', 
                                    names_prefix = 'infections.', 
-                                   values_from = infections.1),
+                                   values_from = infections) %>%
+                       select(time, paste0('infections.', 1:(ncol(.)-1))),
                      p_obs = p_obs, 
                      ww = ww.in,
                      GI_pars = gen_int_pars)
@@ -85,31 +86,28 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   ## 6. Format outputs and plot
   deconvolved <- deconvolved %>%
-    bind_rows(.id = 'rep') %>%
-    merge(select(df, date, time), by = 'time') %>%
-    select(date, rep, RL_result, infections.1) %>%
-    setNames(c('date', 'rep', 'obs_infections_est', 'total_infections_est')) 
+    merge(select(df, date, time, obs), by = 'time') %>%
+    select(date, rep, obs, infections) %>%
+    setNames(c('date', 'rep', 'obs_infections', 'total_infections_est')) 
   
-  RL_plot <- bind_rows(
-    deconvolved %>% select(-total_infections_est) %>% pivot_longer(3),
-    df %>% mutate(rep = NA, name = obscolname) %>% rename(value = obs) %>% select(date, rep, name, value)
-  )%>% 
+  RL_plot <- deconvolved %>% 
+    pivot_longer(3:4) %>%
     ggplot()+
-    geom_line(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
+    geom_point(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
     ylim(c(0, max(df$obs)+20))+
     ggtitle('Observations vs. estimated partial infections')
   
   
-  upscale_plot <- bind_rows(
-    deconvolved %>% select(-obs_infections_est) %>% pivot_longer(3),
-    df %>% mutate(rep = NA, name = obscolname) %>% rename(value = obs) %>% select(date, rep, name, value)
-  )%>% 
-    ggplot()+
-    geom_line(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
-    ylab('count per day') +
-    ylim(c(0, max(df$obs, na.rm = T)*1.3/p_obs))+
-    ggtitle(ttl)+
-    scale_color_discrete('', labels = c(sprintf('%s (observed)', obs_type), 'infections (bootstrapped estimates)'))
+  # upscale_plot <- bind_rows(
+  #   deconvolved %>% select(-obs_infections_est) %>% pivot_longer(3),
+  #   df %>% mutate(rep = NA, name = obscolname) %>% rename(value = obs) %>% select(date, rep, name, value)
+  # )%>% 
+  #   ggplot()+
+  #   geom_line(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
+  #   ylab('count per day') +
+  #   ylim(c(0, max(df$obs, na.rm = T)*1.3/p_obs))+
+  #   ggtitle(ttl)+
+  #   scale_color_discrete('', labels = c(sprintf('%s (observed)', obs_type), 'infections (bootstrapped estimates)'))
   
   rt_plot <- df %>%
     merge(rt_ests$summary, by = 'date') %>% 
@@ -132,8 +130,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   
   outplot <- cowplot::plot_grid(datplot, 
-                     plot_grid(RL_plot+theme(legend.position = 'none'), 
-                               upscale_plot+theme(legend.position = 'none'), nrow = 1), 
+                     plot_grid(RL_plot+theme(legend.position = 'none'), nrow = 1), 
                      delplot,
                      rt_plot, nrow = 4, ncol = 1)
 
@@ -153,7 +150,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
               master_plot = outplot,
               datplot = datplot,
               RL_plot = RL_plot,
-              upscale_plot = upscale_plot,
+             # upscale_plot = upscale_plot,
               delay_plot = delplot,
               rt_plot = rt_plot))
   
