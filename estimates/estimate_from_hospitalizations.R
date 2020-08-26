@@ -1,4 +1,4 @@
-## Estimate Rt from incident hospitalizations
+## Estimate Rt from incident cases
 
 rm(list = ls())
 library(ggplot2)
@@ -8,6 +8,15 @@ library(readr)
 library(cowplot)
 library(EpiEstim)
 theme_set(theme_bw())
+
+## Set the type of smoothing ----------------------------
+ts_colname = 'avg_7d'
+#ts_colname = 'smoothed'
+cat(sprintf('Estimating from %s raw data', ts_colname))
+
+## Set the name of the output directory ---------------------------------
+out_dir <- paste('hospitalizations', ts_colname, Sys.Date(), sep = '_')
+if(!dir.exists(sprintf('../figs/%s/', out_dir))) dir.create(sprintf('../figs/%s/', out_dir))
 
 source('../code/util.R')
 source('../code/cori.R')
@@ -19,76 +28,103 @@ source('../code/rt_boot.R')
 
 
 
-## Load data --------------------------------------------
-min_0 <- function(xx){ifelse(xx<0, 0, xx)}
-dat <- read_csv('../data/idph_cli_admissions_ts.csv') %>%
-  filter(restore_region != 'unknown') %>%
-  mutate(date = epi_week_start) %>%
-  group_by(date, restore_region) %>%
-  summarise(n_admissions = sum(n_admissions)) %>%
-  ungroup() %>%
-  group_by(restore_region) %>%
-  arrange(date) 
 
+
+
+
+## Load data --------------------------------------------
+source('../code/load_timeseries.R')
+dat <- load_EPIC_admissions()
+## Visualize the case counts by restore region. (4 regions)
 dat %>%
+  pivot_longer(c(nadmit, smoothed, avg_7d)) %>%
   ggplot()+
-  geom_line(aes(x = date, y = n_admissions))+
-  facet_wrap(.~restore_region, scales = 'free_y')+
-  ggtitle('idph hospital cli')
-ggsave(sprintf('../figs/hospital_cli_data_%s.png', Sys.Date()))
+  geom_line(aes(x = date, y = value, color = name))+
+  scale_color_manual('', values = c('salmon', 'black', 'dodgerblue'), labels = c('7d average', 'observed', 'smoothed'))
+  ggtitle('idph cases - public linelist')
+ggsave(sprintf('../figs/%s/hospitalizations.png', out_dir), height = 4, width = 7, units = 'in', dpi = 300)
 
 
 ## Estimate Rt by region ------------------------------
-rt_by_region <- function(rr){
-  sprintf('restore region is %s', rr)
-  out = full_rt_pipeline(df = dat %>% filter(restore_region == rr), 
-                         obscolname ='n_admissions',
+rt_by_region <- function(rr, dat){
+  cat(sprintf('region is %s\n', rr))
+  out = full_rt_pipeline(df = dat %>% filter(region == rr), 
+                         obscolname = ts_colname,
                          p_obs = .9,
-                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_hosp_posterior.rds') %>% bind_cols %>% select(1:2),
+                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_hosp_admit_posterior.rds') %>% bind_cols %>% select(1:2),
+                         rep_delay_pars = read_rds('../data/fitted_delays/delay_infection_to_hosp_report_posterior.rds') %>% bind_cols %>% select(1:2),
                          delay_type = 'lognormal',
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
-                         nboot = 25, 
+                         nboot = 1000, 
                          ttl = rr, 
-                         obs_type = 'hospitalizations')
+                         obs_type = 'hospitalizations',
+                         min_window = 1)
   sprintf('%s - done\n', rr)
   return(out)
 }
+
+
+## 1. by restore(4) region ------------------------------
 #Takes a few minutes to run, depending on size of nboot
 #Can't be parallelized because internal operations are already running in parallel
-regional_estimates <- lapply(unique(dat$restore_region), rt_by_region) 
-names(regional_estimates)  = unique(dat$restore_region)
+EPIC_estimates <- lapply(unique(dat$region), rt_by_region, dat = dat) 
+names(EPIC_estimates)  = unique(dat$region)
 
-pdf(file = sprintf('../figs/%s-Regional_rt_from_idph_hospital_cli.pdf', Sys.Date()))
-lapply(regional_estimates, function(ll) cowplot::plot_grid(ll$upscale_plot + theme(legend.position = c(.8, .8)), ll$rt_plot, ncol = 1)) 
+pdf(file = sprintf('../figs/%s/rt_from_EPIC_hospitalizations.pdf', out_dir))
+lapply(EPIC_estimates, function(ll) cowplot::plot_grid(ll$upscale_plot + theme(legend.position = c(.8, .8)), ll$rt_plot, ncol = 1)) 
 dev.off()
 
- 
-## Estimate Rt overall ----------------------------------
-rt_overall <- function(rr){
-  sprintf('restore region is %s', rr)
- out = full_rt_pipeline(df = dat %>% group_by(date) %>% 
-                          summarise(n_admissions = sum(n_admissions, na.rm = T)), 
-                   obscolname ='n_admissions',
-                   p_obs = .9,
-                   delay_pars = read_rds('../data/fitted_delays/delay_infection_to_hosp_posterior.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2),
-                   delay_type = 'lognormal',
-                   gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
-                   nboot = 25, 
-                   ttl = 'IL Overall', obs_type = 'hospitalizations')
- sprintf('%s - done\n', rr)
-return(out)
+
+## Estimate using the raw, shifted time series ----------------------------
+cori_by_region <- function(rr, dat){
+
+    ins <- filter(dat, region == rr) %>% 
+      ungroup() %>%
+      arrange(date) %>%
+      mutate(time = 1:nrow(.)) # Create a numeric time column
+    
+   
+  ## Calculate the appropriate window size
+  ##   This is kind of arbitrary, but it scales with the 20th percentile of daily sample size
+  ww = max(1, floor(50/quantile(filter(ins, smoothed>0)$smoothed, .2)))
+  cat(sprintf('\nregion is %s, window is %.0f\n', rr, ww))
+  
+  ## Calculate the mean delay
+  md = read_rds('../data/fitted_delays/delay_infection_to_hosp_admit_posterior.rds') %>% bind_cols %>% select(1:2) %>% 
+    mutate(mean = exp(mu+sigma^2/2)) %>% 
+    pull(mean) %>% 
+    mean
+  
+  ## Estimate Rt and merge with the original data frame for the region
+  merge(
+    ins,
+    get_cori(ins, 
+             obs_col_name = 'smoothed', 
+             window = ww, 
+             out_name = 'rt',
+             mean_delay = md, 
+             SI_mean = 4.5, ## Rough estimates from Ganyani et al
+             SI_var = 1.7,   
+             wend = F),
+    by = 'time'
+  ) %>%
+    select(-time) %>% ## Drop the arbitrary time vector
+    mutate(window = ww,
+           mean_delay = md) ## Create a column to record the window size
 }
 
-overall_estimates <- rt_overall(dat)
+EPIC_cori<- lapply(unique(dat$region), FUN = cori_by_region, dat = dat) %>%
+  bind_rows %>%
+  rename(rt.lower = rt.025,
+         rt.upper = rt.975)
 
-## Plot
-cowplot::plot_grid(overall_estimates$upscale_plot + theme(legend.position = c(.8, .8)), overall_estimates$rt_plot, ncol = 1)
-ggsave(width = 4, height = 3, filename = sprintf('../figs/%s-Illinois_rt_from_idph_hospitalizations.png', Sys.Date()), dpi = 300)
+
+
 
 
 ## Save results ------------------------------------
-write_csv(lapply(regional_estimates, function(ll) ll$rt_ests$summary) %>% bind_rows(.id = 'region'), sprintf('csv/hospitalizations_regional_%s.csv', Sys.Date()))
-write_csv(overall_estimates$rt_ests$summary, sprintf('csv/hospitalizations_overall_%s.csv', Sys.Date()))
-write_rds(regional_estimates, sprintf('csv/regional_estimates_hospitalizations_%s.rds', Sys.Date()))
-write_rds(overall_estimates, sprintf('csv/overall_estimates_hospitalizations_%s.rds', Sys.Date()))
+write_csv(lapply(EPIC_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/pipeline_hosp.csv', out_dir))
+write_csv(EPIC_cori, sprintf('../figs/%s/shifted_cori_hosp.csv', out_dir))
+write_rds(EPIC_estimates, sprintf('../figs/%s/pipeline_hosp.rds', out_dir))
+write_rds(EPIC_cori, sprintf('../figs/%s/shifted_cori_hosp.rds', out_dir))
 

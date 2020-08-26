@@ -14,7 +14,8 @@
 full_rt_pipeline <- function(df, ## Data frame containing time series of observations
                       obscolname, ## name of the column containing incident observations
                       p_obs,  ## probability of observation (must be a single numberic value between 0 and 1)
-                      delay_pars, ## Data frame containing a column for each delay distribution parameter, and at least one row representing posterior samples. If multiple rows are provided, the algorithm will sample over rows to incorporate uncertainty.
+                      delay_pars, ## Data frame containing a column for each delay distribution parameter, (infection to obs...reporting delay may be additional) and at least one row representing posterior samples. If multiple rows are provided, the algorithm will sample over rows to incorporate uncertainty.
+                      rep_delay_pars = NULL, ## Reporting delay pars for classifcation of estimate reliability
                       delay_type = 'lognormal', ## Can also be "gamma"
                       gen_int_pars, ## Vector containing the mean and sd of the generation interval, which we assume ~gamma.
                       nboot = 500, ## Number of bootstraps
@@ -31,6 +32,9 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   if(!any(grepl('time', names(df)))) df$time <- as.numeric(df$date-min(df$date))
   stopifnot('obs' %in% colnames(df))
   stopifnot(p_obs >0 & p_obs <= 1)
+  if(length(rep_delay_pars)==0){
+    rep_delay_pars = delay_pars
+  }
   
   ## Plot the data
   df %>%
@@ -138,7 +142,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
                      rt_plot, nrow = 4, ncol = 1)
 
   c_p_obs<-data_frame(dd = 0:40) %>%
-    mutate(p_report = plnorm(dd, median(delay_pars$mu), median(delay_pars$sigma))) 
+    mutate(p_report = plnorm(dd, median(rep_delay_pars$mu), median(rep_delay_pars$sigma))) 
   
    clip_end_dates <- c('clip.50' = filter(c_p_obs, p_report <= .5)%>%tail(1)%>%pull(dd),
                        'clip.90' = filter(c_p_obs, p_report <= .9)%>%tail(1)%>%pull(dd))

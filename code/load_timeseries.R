@@ -59,4 +59,22 @@ bind_rows(raw_dat_cr, overall_dat_cr)%>%
   mutate(new_cases = ifelse(new_cases<0, 0, new_cases))
 }
 
-
+load_EPIC_admissions <- function(){
+  ## Load the public linelist data by restore region ------------
+  ## More up to date, public linelist
+  read_csv('../data/EPIC_AdmissionsCountsByAgeDate.csv') %>%
+    rename(age = AgeCategory, 
+           date = AdmitDate,
+           nadmit = NumberOfAdmissions) %>%
+    group_by(date) %>%
+    summarise(nadmit = sum(nadmit)) %>%
+    ungroup %>%
+    tidyr::extract(date, into = c('month', 'day', 'year'), '(\\d\\d?)/(\\d\\d?)/(\\d\\d)') %>%
+    mutate(nadmit = ifelse(is.na(nadmit), 0, nadmit),
+           region = 'ALL_EPIC_HOSPITALS',
+           date = as.Date(sprintf('%2i20-%2i-%2i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
+    mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
+           avg_7d = zoo::rollmean(nadmit, k = 7, fill = list(left = nadmit[1], center = NA, right = nadmit[length(nadmit)]), align = 'center'))  %>%
+    select(-month,-day,-year) %>%
+    ungroup() 
+}

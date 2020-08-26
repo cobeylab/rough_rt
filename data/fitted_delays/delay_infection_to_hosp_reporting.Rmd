@@ -103,13 +103,15 @@ del_onset_to_hosp_Nishiura <- c(
 ## Generate synthetic incubation times
 del_inf_to_onset <- rgamma(n = length(del_onset_to_hosp_hk), shape = 5.807, scale = 0.948) # From Lauer et al. 2020
 
-delay_vec_hk <- as.numeric(del_inf_to_onset + del_onset_to_hosp_hk)
-delay_vec_ni <- as.numeric(del_inf_to_onset + del_onset_to_hosp_Nishiura)
+del_hosp_to_report <- runif(n = length(del_onset_to_hosp_hk), .5, 1)
+
+delay_vec_hk <- as.numeric(del_inf_to_onset + del_onset_to_hosp_hk + del_hosp_to_report)
+delay_vec_ni <- as.numeric(del_inf_to_onset + del_onset_to_hosp_Nishiura + del_hosp_to_report)
 ```
 ## Fit gamma distribution
 ```{r}
-sprintf('mean delay from infection to hospital in hk is %.2f d', mean(delay_vec_hk))
-sprintf('mean delay from infection to hospital based on Linton et al is %.2f d', mean(delay_vec_ni))
+sprintf('mean delay from infection to hospital reporting in hk is %.2f d', mean(delay_vec_hk))
+sprintf('mean delay from infection to hospital reporting based on Linton et al is %.2f d', mean(delay_vec_ni))
 ```
 
 
@@ -194,12 +196,12 @@ post_ni <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length
 bind_rows(list(
   lognormal = post_ni
 ), .id = 'dist') %>%
-  merge(wait, by = 'wait') %>%
+  merge(wait_df, by = 'wait') %>%
   ggplot()+
   geom_bar(data = wait_df, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
   geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
   geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
-  ggtitle('Linton (living): Delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+  ggtitle('Linton (living): Delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp; 1.25 reporting\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
           mean(del_onset_to_hosp_Nishiura), mean(delay_vec_ni), var(delay_vec_ni), mean(params_lognormal_ni$mu), mean(params_lognormal_ni$sigma)))
 ```
 
@@ -230,12 +232,12 @@ bind_rows(list(
   geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
   geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
   geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
-  ggtitle('HK: delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+  ggtitle('HK: delay from infection to hospitalization', subtitle = sprintf('6.1d incubation; %.2fd onset to hosp; 1.25 reporting\nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
           mean(del_onset_to_hosp_hk), mean(delay_vec_hk), var(delay_vec_hk), mean(params_lognormal_hk$mu), mean(params_lognormal_hk$sigma)))
 ```
 
 ## Save the posterior
 ```{r}
-write_rds(params_lognormal_hk, 'delay_infection_to_hosp_admit_posterior.rds')
+write_rds(params_lognormal_hk, 'delay_infection_to_hosp_report_posterior.rds')
 ```
 

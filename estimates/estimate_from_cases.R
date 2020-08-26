@@ -10,12 +10,12 @@ library(EpiEstim)
 theme_set(theme_bw())
 
 ## Set the type of smoothing ----------------------------
-#ts_colname = 'avg_7d'
-ts_colname = 'smoothed'
+ts_colname = 'avg_7d'
+#ts_colname = 'smoothed'
 cat(sprintf('Estimating from %s raw data', ts_colname))
 
 ## Set the name of the output directory ---------------------------------
-out_dir <- paste(Sys.Date(), ts_colname, sep = '_')
+out_dir <- paste('cases', ts_colname, Sys.Date(), sep = '_')
 if(!dir.exists(sprintf('../figs/%s/', out_dir))) dir.create(sprintf('../figs/%s/', out_dir))
 
 source('../code/util.R')
@@ -67,7 +67,7 @@ rt_by_region <- function(rr, dat){
                          delay_pars = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2),
                          delay_type = 'lognormal',
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
-                         nboot = 25, 
+                         nboot = 500, 
                          ttl = rr, 
                          obs_type = 'cases',
                          min_window = 5)

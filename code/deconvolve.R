@@ -21,7 +21,7 @@ deconvolve <- function(obs,  ## Vector of counts per day
     get_RL(observed = obs, 
            times = times, 
            max_iter = 10,
-           verbose = T,
+           verbose = F,
            p_delay = get_discrete_lognormal(k = 0:(length(obs)-1), mu = mm, sigma = ss)) %>%
       filter(time >= 0)
   }, 
