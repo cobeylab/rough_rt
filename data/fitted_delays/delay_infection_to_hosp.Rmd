@@ -38,18 +38,46 @@ clean_dates_hosp <- function(chdate){
 hkdat <- read_csv('../HK_data/data_24July.csv',
                               col_types = "iiffffff") %>%
   setNames(c('id', 'age', 'sex', 'onset', 'hospital', 'isolation', 'discharge', 'death')) %>%
-  select(onset, hospital) %>%
+  select(onset, hospital, age) %>%
   filter(is_valid_date(onset) & is_valid_date(hospital)) %>%
   mutate(onset = clean_dates_onset(onset),
          hospital = clean_dates_hosp(hospital),
          delay = hospital-onset)
+```
 
-
+## Plot by delay
+```{r}
 hkdat %>%
   ggplot() +
   geom_histogram(aes(x = delay), binwidth = 1) +
   ggtitle('HK delays onset to hospital')
 ```
+## Plot by age
+```{r}
+hkdat %>%
+  mutate(age_bin = cut(age, breaks = seq(0, 100, by = 10), include.lowest = T)) %>%
+  ggplot()+
+  geom_violin(aes(x = age_bin, y = delay, fill = age_bin), draw_quantiles = c(.1, .5, .9))+
+  ylim(c(0,20)) +
+  ggtitle('Delay by age') -> vio
+
+vio
+
+vio +
+    geom_point(aes(x = jitter(as.numeric(age_bin)), y = jitter(as.numeric(delay))), alpha = .5)
+```
+
+## Plot age distribution
+```{r}
+hkdat %>% 
+  group_by(age) %>%
+  summarise(n = n()) %>%
+  ggplot()+
+  geom_bar(aes(x = age, y = n), stat = 'identity')+
+  ggtitle('HK hospital admissions with symptom onset date')
+```
+
+
 
 ## Drop negative delays for fitting.
 ```{r}
@@ -151,12 +179,6 @@ wait_df <- data.frame(wait = floor(delay_vec_ni)) %>%
   summarise(count = n()) %>%
    mutate(kind = 'ni')
 
-# wait %>%
-#   ggplot() +
-#   geom_bar(aes(x = wait, y = count), stat = 'identity')+
-#   facet_grid(.~kind)
- 
-
 
 post_ni <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length(delay_vec_ni), 
                          mm = params_lognormal_ni$mu,
@@ -187,12 +209,6 @@ wait <- data.frame(wait = floor(delay_vec_hk)) %>%
   group_by(wait) %>%
   summarise(count = n()) %>%
    mutate(kind = 'hk')
-
-# wait %>%
-#   ggplot() +
-#   geom_bar(aes(x = wait, y = count), stat = 'identity')+
-#   facet_grid(.~kind)
- 
 
 
 post_hk <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length(delay_vec_hk), 

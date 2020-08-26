@@ -10,14 +10,14 @@ source('estimate_from_cases.R')
 
 
 ## Plot results for dates of interest
-ANALYZE_DATE <- Sys.Date() ## Set the date 
+path <- paste(Sys.Date(), ts_colname, sep = '_') ## Set the date 
 ## Load data by covid region
 source('../code/load_timeseries.R')
 ## Load raw cases
 raw_cases_cr <- load_idph_public_cases_covid_region()
 
 ## Load rt estimates by restore region
-cases_rt_restore_region <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', ANALYZE_DATE)) %>% 
+cases_rt_restore_region <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', path)) %>% 
   mutate(obs = 'cases',
          region = toupper(region),
          method = 'full_pipeline',
@@ -28,7 +28,7 @@ cases_rt_restore_region <- read_csv(sprintf('../figs/%s/cases_restore_region.csv
   select(date, region, obs, method, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper) 
 
 ## Load rt estimates by covid region
-cases_rt_covid_region <- read_csv(sprintf('../figs/%s/cases_covid_region.csv', ANALYZE_DATE), col_types = cols(
+cases_rt_covid_region <- read_csv(sprintf('../figs/%s/cases_covid_region.csv', path), col_types = cols(
   date = col_date(format = ""),
   region = col_character(),
   new_cases = col_double(),
@@ -51,7 +51,7 @@ cases_rt_covid_region <- read_csv(sprintf('../figs/%s/cases_covid_region.csv', A
   select(date, region, obs, method, robustness, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper) 
 
 ## Load rt estimates using shifted observations and the cori method for restore regions
-cases_cori_restore_region <- read_csv(sprintf('../figs/%s/shifted_cases_restore_region.csv', ANALYZE_DATE)) %>% 
+cases_cori_restore_region <- read_csv(sprintf('../figs/%s/shifted_cases_restore_region.csv', path)) %>% 
   mutate(obs = 'cases',
          method = 'shifted_cori',
          mean_delay = mean_delay,
@@ -62,7 +62,7 @@ cases_cori_restore_region <- read_csv(sprintf('../figs/%s/shifted_cases_restore_
   select(date, region, obs, method, mean_delay, raw, smoothed, shifted, rt.mean, rt.lower, rt.upper)
 
 ## Load rt estimates using shifted observations and the cori method for covid regions
-cases_cori_covid_region <- read_csv(sprintf('../figs/%s/shifted_cases_covid_region.csv', ANALYZE_DATE), col_types = cols(
+cases_cori_covid_region <- read_csv(sprintf('../figs/%s/shifted_cases_covid_region.csv', path), col_types = cols(
   date = col_date(format = ""),
   region = col_character(),
   new_cases = col_double(),
@@ -101,7 +101,7 @@ bind_rows(cases_cori_restore_region, cases_rt_restore_region) %>%
   ylim(c(0,2.5))+
   ylab('Rt') -> case_compare
 case_compare
-ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.png', path), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 # ## Load epinow2 estimates
 # load_epinow2 <- function(region){
@@ -114,9 +114,9 @@ ggsave(plot = case_compare, sprintf('../figs/%s/compare_cases_restore_region_rt.
 ## RESTORE REGION ------------------------
 ##  Plot cases vs. deconvolved cases
 ymn = .25; ymx = 3.5;
-raw_cases <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', ANALYZE_DATE)) %>%
+raw_cases <- read_csv(sprintf('../figs/%s/cases_restore_region.csv', path)) %>%
   mutate(region = toupper(region))
-deconvolved_cases <- read_rds(sprintf('../figs/%s/restore_region_estimates_cases.rds', ANALYZE_DATE)) %>%
+deconvolved_cases <- read_rds(sprintf('../figs/%s/restore_region_estimates_cases.rds', path)) %>%
   lapply(function(ll) ll$deconvolved) %>% bind_rows(.id = 'region') %>%
   group_by(date, region) %>%
   summarize(deconvolved = mean(total_infections_est, na.rm = T),
@@ -133,11 +133,11 @@ deconvolved_cases %>%
   xlim(c(lubridate::as_date('2020-04-01'), Sys.Date()))+
   facet_wrap(.~region, scales = 'free_y', nrow = 1) -> case_dat
 case_dat
-ggsave(plot = case_dat, sprintf('../figs/%s/compare_case_data.png', ANALYZE_DATE), height = 2.5, width = 9, units = 'in', dpi = 300)
+ggsave(plot = case_dat, sprintf('../figs/%s/compare_case_data.png', path), height = 2.5, width = 9, units = 'in', dpi = 300)
 
 ## Plot restore region summary
 cowplot::plot_grid(case_dat, death_dat, case_death, case_compare, deaht_compare, nrow = 5, rel_heights = c(1, 1, 1.5, 1.5, 1.5))
-ggsave(sprintf('../figs/%s/summary_restore_region_estimates.png', ANALYZE_DATE), width = 9, height = 2.5, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/summary_restore_region_estimates.png', path), width = 9, height = 2.5, units = 'in', dpi = 300)
 
 
 
@@ -165,10 +165,10 @@ plot_cr_rt <- function(regions){
 
 ## Plot and save Rt estimates for regions 1-6
 plot_cr_rt(as.character(1:6))
-ggsave(sprintf('../figs/%s/cases_rt_regions_1-6.png', ANALYZE_DATE), height = 12, width = 3, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/cases_rt_regions_1-6.png', path), height = 12, width = 3, units = 'in', dpi = 300)
 ## Repeat for regions 7-11
 plot_cr_rt(c(as.character(7:11), 'IL_Overall'))
-ggsave(sprintf('../figs/%s/cases_rt_regions_7-Overall.png', ANALYZE_DATE), height = 12, width = 3, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/cases_rt_regions_7-Overall.png', path), height = 12, width = 3, units = 'in', dpi = 300)
 
 
 
@@ -176,7 +176,7 @@ ggsave(sprintf('../figs/%s/cases_rt_regions_7-Overall.png', ANALYZE_DATE), heigh
 plot_cr_data <- function(regions){
 raw_cases_cr %>%
     filter(region %in% regions) %>%
-  pivot_longer(c(new_cases, avg_7d)) %>%
+  pivot_longer(c(new_cases, !!sym(ts_colname))) %>%
   filter(value > 0) %>%
   ggplot()+
   geom_line(aes(x = date, y = value, color = name))+
@@ -187,9 +187,9 @@ raw_cases_cr %>%
   
 }
 plot_cr_data(as.character(1:6))
-ggsave(sprintf('../figs/%s/covid_region_1-6_case_data.png', ANALYZE_DATE), width = 2.5, height = 9, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/covid_region_1-6_case_data.png', path), width = 2.5, height = 9, units = 'in', dpi = 300)
 plot_cr_rt(c(as.character(7:11), 'IL_Overall'))
-ggsave(sprintf('../figs/%s/covid_region_7-Overall_case_data.png', ANALYZE_DATE), width = 2.5, height = 9, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/covid_region_7-Overall_case_data.png', path), width = 2.5, height = 9, units = 'in', dpi = 300)
 
 
 
@@ -198,9 +198,9 @@ ggsave(sprintf('../figs/%s/covid_region_7-Overall_case_data.png', ANALYZE_DATE),
 ## Plot covid region summary
 cowplot::plot_grid(plot_cr_rt(as.character(1:6)), 
                    plot_cr_data(as.character(1:6)), ncol = 2, align = 'h')
-ggsave(sprintf('../figs/%s/summary_covid_region_estimates_1-6.png', ANALYZE_DATE), width = 8, height = 12, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/summary_covid_region_estimates_1-6.png', path), width = 8, height = 12, units = 'in', dpi = 300)
 
 cowplot::plot_grid(plot_cr_rt(c(as.character(7:11), 'IL_Overall')),
                    plot_cr_data(c(as.character(7:11), 'IL_Overall')), ncol = 2)
-ggsave(sprintf('../figs/%s/summary_covid_region_estimates_7-Overall.png', ANALYZE_DATE), width = 8, height = 12, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/summary_covid_region_estimates_7-Overall.png', path), width = 8, height = 12, units = 'in', dpi = 300)
 

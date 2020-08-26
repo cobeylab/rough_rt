@@ -3,12 +3,16 @@
 ## ------- Inputs
 ##  This function follows methods in Goldstein et al. (https://www.pnas.org/content/pnas/106/51/21825.full.pdf)
 #' @param observed - a vector of the number of observed cases, deaths, hospitalizations, etc. per day
-#' @param times - a numeric vector of times corresponding to the entries in observed. Must be the same length as observed.
-#' @param p_delay - a numeric vector whose entries give the probability that the delay from infection to observation is exactly 0, 1, ... N days. p_delay must sum to 1 and to to facilitate vectorization should be the same length as observed, and times (the last several entries will most likely be 0s).
-#' @param max_iter - maximum number of times to iterate. Following Goldstien et al., the algorithm continues to run until the normalized chi2 statistic comparing the observed and expected number of deaths per day falls below 1, or until the maximum number of iterations is reached.
-#' @param out_col_name - string giving the name of the column in which to output the imputed times of infection
+#' @param times - a numeric vector of times corresponding to the entries in `observed`. Must be the same length as `observed`.
+#' @param p_delay - a numeric vector whose entries give the probability that the delay from infection to observation is exactly 0, 1, ... N days, where N is the maximum allowed delay.
+#' @param max_iter - maximum number of times to iterate. Following Goldstien et al., the algorithm continues to run until the normalized chi2 statistic comparing the observed and expected number of deaths per day falls below 1, or until the maximum number of iterations is reached. Usually convergence occurs in < 10 iterations. More iterations may indicate gross misspecification of the delay distribution, or amplification of noise.
+#' @param out_col_name - default column header for the output is 'RL_result'. Specify an alternative string if desired.
 ## --------- Outputs
-#' @value - the function returns a data frame with columns time and out_col_name (which gives the imputed number of infections per timestep)
+#' @value - the function returns a data frame with columns time and `out_col_name` (which gives the inferred number of infections per timestep)
+
+
+## - METHODS NOTE
+## 
 
 # # # For testing/debugging
 # obs_df <- obs_df %>%
@@ -30,8 +34,7 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
                    max_iter = 50,
                    out_col_name = 'RL_result',
                    right_censor = TRUE,
-                   verbose = FALSE,
-                   ww = 0){
+                   verbose = FALSE){
   
   ## Check inputs
   stopifnot(is.vector(observed) & is.vector(times) & is.vector(p_delay))
@@ -113,16 +116,6 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
                      obs = observed, 
                      expected = expected_D)
     lambda = lambda_unsmoothed
-    if(ww>0){
-    wts = choose(ww, 0:ww)/(2^ww)
-    #lambda = lambda_unsmoothed = rnorm(100)
-    for(ii in (ww/2+1):(length(lambda)-ww/2-1)){
-      inds <- max(1, ii-ww/2):min(length(lambda_unsmoothed), ii+ww/2)
-      lambda[ii] = sum(lambda_unsmoothed[inds]*wts)
-    }
-    }
-    #plot(lambda_unsmoothed)
-    #points(lambda, col = 'red')
     iter = iter+1
   }
   ## Clean

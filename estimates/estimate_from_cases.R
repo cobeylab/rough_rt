@@ -54,7 +54,7 @@ dat_11r %>%
   scale_color_manual("", values = c('cyan', 'darkblue', 'yellow'))+
   theme(legend.position = 'bottom')+
   ggtitle('idph cases - public linelist')
-ggsave(sprintf('../figs/%s/cases_covid_region.png', out_dir), , height = 6, width = 7, units = 'in', dpi = 300)
+ggsave(sprintf('../figs/%s/cases_covid_region.png', out_dir), height = 6, width = 7, units = 'in', dpi = 300)
 
 
 
