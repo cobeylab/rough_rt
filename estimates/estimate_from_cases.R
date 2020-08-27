@@ -7,6 +7,7 @@ library(tidyr)
 library(readr)
 library(cowplot)
 library(EpiEstim)
+library(magic)
 theme_set(theme_bw())
 
 ## Set the type of smoothing ----------------------------

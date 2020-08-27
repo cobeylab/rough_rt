@@ -42,7 +42,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   
   ## 3. Use RL to infer times of infection given the posterior parms of the delay
-  deconvolved <- deconvolve(df$obs, times = df$time, delay_posterior = delay_pars, delay_type = delay_type, n_samples = 10, n_burn_in = 5) 
+  deconvolved <- deconvolve(df$obs, times = df$time, delay_posterior = delay_pars, delay_type = delay_type)#, n_samples = 10, n_burn_in = 5) 
   
   ## 4. Upscale from deconvolved times of infection to total infections based on p_obs
   deconvolved <- lapply(deconvolved, FUN = function(df.in) {

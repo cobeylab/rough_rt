@@ -2,7 +2,7 @@ deconvolve <- function(obs,  ## Vector of counts per day
                        times = NULL,  ## Optional numeric vector of times
                        delay_posterior,
                        delay_type = 'lognormal',
-                       nboot
+                       nboot = 20
 ){
   ## Check inputs
   if(length(times) == 0){

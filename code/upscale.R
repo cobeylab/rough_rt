@@ -5,15 +5,18 @@ est_total_inf <- function(df, ## Data frame containing a column with daily obser
 {
   draw_one_sample <- function(k, p){
     # adjust observations to work with negative binomial, i.e., case with 0 observations
-    adjusted_k = replace(k, k==0, 0.1)
+    # adjusted_k = replace(k, k==0, 0.1)
+    adjusted_k <- ifelse(k ==0, 0.1, k)
     
     # Draw a negative binomial sample
     observations = round(mapply(rnbinom, 1, adjusted_k, p) + adjusted_k)
     as.numeric(observations)
   }
   
-  obs = df %>% select(obs_colname) %>% unlist(use.names = F)
+  obs = df %>% dplyr::select(-time) %>% unlist(use.names = F)
   obs = ifelse(is.na(obs), 0, obs)
+  
+  print(dim(obs))
   
   ## For each entry in the observations column, upscale
   infection_samples = replicate(n = n_replicates, draw_one_sample(obs, p_obs))
