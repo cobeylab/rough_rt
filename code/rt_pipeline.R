@@ -1,5 +1,5 @@
-# df = dat %>% filter(restore_region != 'chicago') %>% group_by(date) %>% 
-#   summarise(new_deaths = sum(new_deaths, na.rm = T))
+# df = dat %>% filter(region != 'CHICAGO') %>% group_by(date) %>%
+#   summarise(new_cases = sum(new_cases, na.rm = T))
 # obscolname ='new_deaths'
 # p_obs = .9
 # delay_pars = read_rds('../data/fitted_delays/Linton_lognorm_sample.rds') %>% bind_cols %>% select(1:2) %>% bind_cols %>% select(1:2)
@@ -11,18 +11,22 @@
 # 
 
 
-full_rt_pipeline <- function(df, ## Data frame containing time series of observations
+upscale_cori_pipeline <- function(df, ## Data frame containing time series of observations
                       obscolname, ## name of the column containing incident observations
                       p_obs,  ## probability of observation (must be a single numberic value between 0 and 1)
-                      delay_pars, ## Data frame containing a column for each delay distribution parameter, (infection to obs...reporting delay may be additional) and at least one row representing posterior samples. If multiple rows are provided, the algorithm will sample over rows to incorporate uncertainty.
-                      rep_delay_pars = NULL, ## Reporting delay pars for classifcation of estimate reliability
-                      delay_type = 'lognormal', ## Can also be "gamma"
+                      delay_mean, 
                       gen_int_pars, ## Vector containing the mean and sd of the generation interval, which we assume ~gamma.
                       nboot = 500, ## Number of bootstraps
                       ttl = 'Data',
-                      obs_type = 'deaths',
+                      obs_type = 'cases',
                       min_window = 1
                       ){
+  
+  ## Utility function
+  get_complete_dates <- function(dates){
+    num_dates = date_to_num(min(dates)):date_to_num(max(dates))
+    num_to_date(num_dates)
+  }
   
   ## Check inputs
   df <- as.data.frame(df)
@@ -32,9 +36,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   if(!any(grepl('time', names(df)))) df$time <- as.numeric(df$date-min(df$date))
   stopifnot('obs' %in% colnames(df))
   stopifnot(p_obs >0 & p_obs <= 1)
-  if(length(rep_delay_pars)==0){
-    rep_delay_pars = delay_pars
-  }
+  stopifnot(delay_mean>0)
   
   ## Plot the data
   df %>%
@@ -46,25 +48,29 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
     ggtitle(ttl) -> datplot
   
   
-  ## 3. Use RL to infer times of infection given the posterior parms of the delay
-  deconvolved <- deconvolve(df$obs, times = df$time, delay_posterior = delay_pars, nboot = nboot, delay_type = delay_type) 
+  ## 3. Shift timeseries by mean delay
+  df <- df %>%
+    arrange(date) %>%
+    complete(date = get_complete_dates(date)) %>%
+    mutate(shifted = lag(obs, round(delay_mean)))
   
-  ## 4. Upscale from deconvolved times of infection to total infections based on p_obs
-  deconvolved <- lapply(deconvolved, FUN = function(df.in) {
-    est_total_inf(df.in, 
+  ## 4. Repeatedly upscale shifted time series
+  if(p_obs < 1){
+  upscaled <- est_total_inf(df, 
                   p_obs = p_obs, 
-                  obs_colname = 'RL_result',
-                  n_replicates = 1) 
+                  obs_colname = 'shifted',
+                  n_replicates = nboot) 
+  }else{
+    stopifnot(abs(p_obs-1) < 1e-6)
+    upscaled <- df %>% mutate(infections.1 = shifted)
   }
-  )
-  
 
 
   
   ## 5. Estimate Rt
   ## Calculate the window size
-  low_inf_count = filter(bind_rows(deconvolved), RL_result>0 & !is.na(RL_result)) %>%
-    pull(RL_result) %>%
+  low_inf_count = filter(df, !is.na(obs) & obs > 0) %>%
+    pull(obs) %>%
     quantile(.2) %>%
     round %>%
     max(1)
@@ -72,13 +78,7 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   cat(sprintf('\nwindow is %.0f\n', ww.in))
   
   
-  rt_ests <- rt_boot(infection_ests = deconvolved %>% 
-                       bind_rows(.id = 'rep') %>% 
-                       mutate(RL_result = round(RL_result)) %>%
-                       pivot_wider(id_cols = time, 
-                                   names_from = 'rep', 
-                                   names_prefix = 'infections.', 
-                                   values_from = infections.1),
+  rt_ests <- rt_boot(infection_ests = upscaled %>% select(time, contains('infections')),
                      p_obs = p_obs, 
                      ww = ww.in,
                      GI_pars = gen_int_pars)
@@ -88,77 +88,55 @@ full_rt_pipeline <- function(df, ## Data frame containing time series of observa
   
   
   ## 6. Format outputs and plot
-  deconvolved <- deconvolved %>%
-    bind_rows(.id = 'rep') %>%
-    merge(select(df, date, time), by = 'time') %>%
-    select(date, rep, RL_result, infections.1) %>%
-    setNames(c('date', 'rep', 'obs_infections_est', 'total_infections_est')) 
+  upscaled <- upscaled %>%
+    pivot_longer(cols = contains('infections'), names_to = 'rep', names_prefix = 'infections.', values_to = 'upscaled_total') %>%
+    select(date, obs, shifted, rep, upscaled_total)
   
-  RL_plot <- bind_rows(
-    deconvolved %>% select(-total_infections_est) %>% pivot_longer(3),
-    df %>% mutate(rep = NA, name = obscolname) %>% rename(value = obs) %>% select(date, rep, name, value)
-  )%>% 
+  upscale_plot <- upscaled %>%
+    group_by(date) %>%
+    mutate(lower.upscale = quantile(upscaled_total, .025, na.rm = T),
+           est_total = quantile(upscaled_total, .5, na.rm = T),
+           upper.upscale = quantile(upscaled_total, .975, na.rm = T)) %>%
+    select(-upscaled_total, -rep) %>%
+    distinct %>%
+    pivot_longer(cols = c(obs, shifted, est_total)) %>%
     ggplot()+
-    geom_line(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
-    ylim(c(0, max(df$obs)+20))+
-    ggtitle('Observations vs. estimated partial infections')
-  
-  
-  upscale_plot <- bind_rows(
-    deconvolved %>% select(-obs_infections_est) %>% pivot_longer(3),
-    df %>% mutate(rep = NA, name = obscolname) %>% rename(value = obs) %>% select(date, rep, name, value)
-  )%>% 
-    ggplot()+
-    geom_line(aes(x = date, y = value, group = rep, color = name), alpha = .8) +
-    ylab('count per day') +
-    ylim(c(0, max(df$obs, na.rm = T)*1.3/p_obs))+
-    ggtitle(ttl)+
-    scale_color_discrete('', labels = c(sprintf('%s (observed)', obs_type), 'infections (bootstrapped estimates)'))
+    geom_line(aes(x = date, y = value, color = name), alpha = .8) +
+    scale_color_viridis_d('') +
+    geom_ribbon(aes(x = date, ymin = lower.upscale, ymax = upper.upscale), fill = viridisLite::viridis(3)[1], alpha = .5)
   
   rt_plot <- df %>%
     merge(rt_ests$summary, by = 'date') %>% 
     ggplot()+
-    geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), fill = 'yellow', alpha = .5)+
-    #geom_line(data = bind_rows(rt_ests$all, .id = 'rep') %>% mutate(date = min(df$date)+time), aes(x = date, y = rt.mean, group = rep), alpha = .5, color = 'orange')+
-    geom_line(aes(x = date, y = rt.mean), color = 'red')+
-    xlim(c(min(deconvolved$date), max(deconvolved$date)))+
+    geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), fill = 'dodgerblue', alpha = .5)+
+    geom_line(aes(x = date, y = rt.mean), color = 'blue3')+
+    xlim(c(min(df$date), max(df$date)))+
+    ylim(c(0, 4))+
     geom_hline(aes(yintercept = 1))+
     ylab(expression(paste(R[t])))
   
-  
-  delplot <- delay_pars %>% 
-    select(1:2) %>%
-    pivot_longer(1:2) %>%
-    ggplot()+
-    geom_density(aes(x = value, fill = name, color = name), alpha = .5)+
-    facet_grid(.~name, scales = 'free_x') +
-    ggtitle(sprintf('%s delay pars', delay_type))
-  
-  
-  outplot <- cowplot::plot_grid(datplot, 
-                     plot_grid(RL_plot+theme(legend.position = 'none'), 
-                               upscale_plot+theme(legend.position = 'none'), nrow = 1), 
-                     delplot,
-                     rt_plot, nrow = 4, ncol = 1)
 
-  c_p_obs<-data_frame(dd = 0:40) %>%
-    mutate(p_report = plnorm(dd, median(rep_delay_pars$mu), median(rep_delay_pars$sigma))) 
   
-   clip_end_dates <- c('clip.50' = filter(c_p_obs, p_report <= .5)%>%tail(1)%>%pull(dd),
-                       'clip.90' = filter(c_p_obs, p_report <= .9)%>%tail(1)%>%pull(dd))
+  outplot <- cowplot::plot_grid(upscale_plot + theme(legend.position = 'bottom'),
+                     rt_plot, nrow = 2, ncol = 1)
+
+  # c_p_obs<-data_frame(dd = 0:40) %>%
+  #   mutate(p_report = plnorm(dd, median(rep_delay_pars$mu), median(rep_delay_pars$sigma))) 
+  # 
+  #  clip_end_dates <- c('clip.50' = filter(c_p_obs, p_report <= .5)%>%tail(1)%>%pull(dd),
+  #                      'clip.90' = filter(c_p_obs, p_report <= .9)%>%tail(1)%>%pull(dd))
   
-  df %>% merge(rt_ests$summary, by = c('date', 'time')) %>%
-    mutate(robustness = ifelse(date <= (max(date)-clip_end_dates['clip.90']), 'robust', 
-                                ifelse(date <= (max(date)-clip_end_dates['clip.50']), 'partial data', 'unreliable'))) -> outs
+  outs <- df %>% merge(rt_ests$summary, by = c('date', 'time')) 
+  
+ # %>% mutate(robustness = ifelse(date <= (max(date)-clip_end_dates['clip.90']), 'robust', 
+  #                              ifelse(date <= (max(date)-clip_end_dates['clip.50']), 'partial data', 'unreliable'))) -> outs
   
   return(list(df = outs,
-              deconvolved = deconvolved,
+              upscaled = upscaled,
               rt_ests = rt_ests,
               master_plot = outplot,
               datplot = datplot,
-              RL_plot = RL_plot,
               upscale_plot = upscale_plot,
-              delay_plot = delplot,
               rt_plot = rt_plot))
   
 }

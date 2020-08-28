@@ -170,3 +170,11 @@ get_rate <- function(mean, vv){
 }
 
 dir_check <- function(dirname) if(!dir.exists(dirname)) dir.create(dirname)
+
+date_to_num <- function(xx){
+  as.numeric(as.Date(xx, origin = '1970-01-01'))
+}
+
+num_to_date <- function(xx){
+  as.Date(xx, origin = '1970-01-01')
+}
