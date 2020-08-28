@@ -70,7 +70,7 @@ rt_by_region <- function(rr, dat){
                          nboot = 500, 
                          ttl = rr, 
                          obs_type = 'cases',
-                         min_window = 5)
+                         min_window = 1)
   sprintf('%s - done\n', rr)
   return(out)
 }
