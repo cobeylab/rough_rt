@@ -13,7 +13,7 @@ est_total_inf <- function(df, ## Data frame containing a column with daily obser
   }
   
   obs = df %>% select(obs_colname) %>% unlist(use.names = F)
-  obs = ifelse(is.na(obs), 0, obs)
+  #obs = ifelse(is.na(obs), 0, obs)
   
   ## For each entry in the observations column, upscale
   infection_samples = replicate(n = n_replicates, draw_one_sample(obs, p_obs))

@@ -21,8 +21,6 @@ if(!dir.exists(sprintf('../figs/%s/', out_dir))) dir.create(sprintf('../figs/%s/
 source('../code/util.R')
 source('../code/cori.R')
 source('../code/rt_pipeline.R')
-source('../code/deconvolve.R')
-source('../code/Richardson_Lucy.R')
 source('../code/upscale.R')
 source('../code/rt_boot.R')
 
@@ -57,15 +55,20 @@ dat_11r %>%
 ggsave(sprintf('../figs/%s/cases_covid_region.png', out_dir), height = 6, width = 7, units = 'in', dpi = 300)
 
 
+## Calculate the mean delay
+mean_delay <- read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2) %>%
+  mutate(mean = exp(mu+sigma^2/2)) %>%
+  pull(mean) %>%
+  mean() %>% round()
+
 
 ## Estimate Rt by region ------------------------------
 rt_by_region <- function(rr, dat){
   cat(sprintf('restore region is %s\n', rr))
-  out = full_rt_pipeline(df = dat %>% filter(region == rr), 
+  out = upscale_cori_pipeline(df = dat %>% filter(region == rr), 
                          obscolname = ts_colname,
                          p_obs = .15,
-                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2),
-                         delay_type = 'lognormal',
+                         delay_mean = mean_delay,
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
                          nboot = 500, 
                          ttl = rr, 
@@ -98,62 +101,33 @@ dev.off()
 
 
 
-## Estimate using the raw, shifted time series ----------------------------
-cori_by_region <- function(rr, dat){
-
-    ins <- filter(dat, region == rr) %>% 
-      ungroup() %>%
-      arrange(date) %>%
-      mutate(time = 1:nrow(.)) # Create a numeric time column
-    
-   
-  ## Calculate the appropriate window size
-  ##   This is kind of arbitrary, but it scales with the 20th percentile of daily sample size
-  ww = max(1, floor(50/quantile(filter(ins, smoothed>0)$smoothed, .2)))
-  cat(sprintf('\nregion is %s, window is %.0f\n', rr, ww))
-  
-  ## Calculate the mean delay
-  md = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2) %>% 
-    mutate(mean = exp(mu+sigma^2/2)) %>% 
-    pull(mean) %>% 
-    mean
-  
-  ## Estimate Rt and merge with the original data frame for the region
-  merge(
-    ins,
-    get_cori(ins, 
-             obs_col_name = 'smoothed', 
-             window = ww, 
-             out_name = 'rt',
-             mean_delay = md, 
-             SI_mean = 4.5, ## Rough estimates from Ganyani et al
-             SI_var = 1.7,   
-             wend = F),
-    by = 'time'
-  ) %>%
-    select(-time) %>% ## Drop the arbitrary time vector
-    mutate(window = ww,
-           mean_delay = md) ## Create a column to record the window size
+plot_summary <- function(estlist, fname){
+  p1 <- cowplot::plot_grid(plotlist =
+                             mapply(FUN = function(ll, nm) {
+                               ll$upscale_plot+theme(legend.position = 'none')+ggtitle(nm)
+                             }, ll = estlist, nm = names(estlist), SIMPLIFY = F),
+                           ncol = 1)
+  p2 <- cowplot::plot_grid(plotlist = lapply(estlist, function(ll) ll$rt_plot + ylim(c(0,3))),
+                           ncol = 1)
+  ggsave(sprintf('../figs/%s/%s', out_dir, fname), 
+         cowplot::plot_grid(
+           cowplot::plot_grid(p1, p2, ncol = 2),
+           get_legend(estlist[[1]]$upscale_plot+theme(legend.position = 'bottom')),
+           nrow = 2, rel_heights = c(15, 1)
+         ),
+         width = 6, height = 12, dpi = 300)
 }
-
-restore_region_cori<- lapply(unique(dat$region), FUN = cori_by_region, dat = dat) %>%
-  bind_rows %>%
-  rename(rt.lower = rt.025,
-         rt.upper = rt.975)
-covid_region_cori<- lapply(unique(dat_11r$region), FUN = cori_by_region, dat = dat_11r) %>%
-  bind_rows %>%
-  rename(rt.lower = rt.025,
-         rt.upper = rt.975)
-#overall_cori <- cori_by_region('overall', dat = dat)
 
 
 
 
 ## Save results ------------------------------------
-write_csv(lapply(restore_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/cases_restore_region.csv', out_dir))
-write_csv(lapply(covid_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/cases_covid_region.csv', out_dir))
-write_csv(restore_region_cori, sprintf('../figs/%s/shifted_cases_restore_region.csv', out_dir))
-write_csv(covid_region_cori, sprintf('../figs/%s/shifted_cases_covid_region.csv', out_dir))
-write_rds(restore_region_estimates, sprintf('../figs/%s/restore_region_estimates_cases.rds', out_dir))
-write_rds(covid_region_estimates, sprintf('../figs/%s/covid_region_estimates_cases.rds', out_dir))
+write_csv(lapply(restore_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/shift_pipeline_cases_restore_region.csv', out_dir))
+write_csv(lapply(covid_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/shift_pipeline_cases_covid_region.csv', out_dir))
+write_rds(restore_region_estimates, sprintf('../figs/%s/shift_pipeline_cases_restore_region.rds', out_dir))
+write_rds(covid_region_estimates, sprintf('../figs/%s/shift_pipeline_cases_covid_region.rds', out_dir))
 
+## Generate plots
+plot_summary(restore_region_estimates, 'restore_region_summary.png')
+plot_summary(covid_region_estimates[1:6], 'covid_region_1-6_summary.png')
+plot_summary(covid_region_estimates[7:12], 'covid_region_7-ILOverall_summary.png')
