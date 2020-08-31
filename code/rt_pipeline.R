@@ -52,7 +52,7 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
   df <- df %>%
     arrange(date) %>%
     complete(date = get_complete_dates(date)) %>%
-    mutate(shifted = lag(obs, round(delay_mean)))
+    mutate(shifted = lead(obs, round(delay_mean)))
   
   ## 4. Repeatedly upscale shifted time series
   if(p_obs < 1){

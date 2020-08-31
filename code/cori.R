@@ -16,38 +16,34 @@
 # SI_var = 2*(parlist$true_mean_SI/2)^2
 ## Output cori estimate with mean, CI and times given an input df, and the name of the incidence column
 get_cori <- function(df.in, 
-                     obs_col_name,
+                     icol_name,
                      out_name = 'Cori',
                      window = 1, 
-                     mean_delay = 0,
                      SI_mean=parlist$true_mean_SI, 
                      SI_var=2*(parlist$true_mean_SI/2)^2,
                      wend = TRUE){
   
-  df.in[,obs_col_name] <- na_to_0(df.in[,obs_col_name]) ## Replace NAs in incidence
-  df.in$shifted_obs <- lead(pull(df.in, eval(obs_col_name)), n = round(mean_delay))
-  
-  
+  ## Extract the last non-NA observation
+  max.valid.obs <- (df.in %>% filter(!is.na(!!sym(icol_name))) %>% pull(time) %>% tail(1))
+  ## Complete all dates up to the max.valid.obs, and convert any intermediate NAs to 0s
   idat <- df.in %>%
-    #filter(get(obs_col_name) > 0 & !is.na(get(obs_col_name))) %>%
-    tidyr::complete(time = 2:max(df.in$time)) %>%
-    mutate_all(.funs = function(xx){ifelse(is.na(xx), 0, xx)}) %>%
-    arrange(time)
+    complete(time = 2:max.valid.obs) %>%
+    arrange(time) %>%
+    filter(time <= max.valid.obs)
+  idat[icol_name] <- na_to_0(idat[icol_name])
   
-
-  st.time <- filter(df.in, shifted_obs>(50/window)) %>%
+  ## Get the first window start time for input into Cori.
+  ## Must be >2. We delay until a sufficient number observed per day.
+  st.time <- filter(df.in, !!sym(icol_name)>(50/window)) %>%
     pull(time) %>% head(1)
   st.time <- max(2, st.time)
   
-  ed.time <- filter(df.in, shifted_obs>0) %>%
-    pull(time) %>% tail(1)
-  
   ts <- idat$time
-  ts <- ts[ts > st.time & ts <= (ed.time-window)]
+  ts <- ts[ts > st.time & ts <= (max.valid.obs-window)]
   te <- ts+(window-1)
   
   EpiEstim::estimate_R(
-    incid = pull(idat, shifted_obs),
+    incid = pull(idat, !!sym(icol_name)),
     method = "uncertain_si",
     config = EpiEstim::make_config(
       list(

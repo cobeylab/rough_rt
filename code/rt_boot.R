@@ -12,15 +12,14 @@ rt_boot <- function(
   library(doParallel)
   cl <- makeCluster(parallel::detectCores()-1)
   registerDoParallel(cl)
-  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %dopar% {
+  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim', 'tidyr'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %dopar% {
                         
                         ins = infection_ests[,c(1, ii)]
                         
                         df<-get_cori(ins, 
-                                 obs_col_name = paste0('infections.', ii-1), 
+                                 icol_name = paste0('infections.', ii-1), 
                                  window = ww, 
                                  out_name = 'rt',
-                                 mean_delay = mean_delay, 
                                  SI_mean = GI_pars[1], ## Rough estimates from Ganyani et al
                                  SI_var = GI_pars[2],   
                                  wend = F) %>%
