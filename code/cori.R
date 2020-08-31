@@ -30,7 +30,11 @@ get_cori <- function(df.in,
     complete(time = 2:max.valid.obs) %>%
     arrange(time) %>%
     filter(time <= max.valid.obs)
-  idat[icol_name] <- na_to_0(idat[icol_name])
+  if(any(is.na(idat[icol_name]))){
+    warning('NAs present within time series. Converting to 0s. This will impact Rt estimates.')
+    idat[icol_name] <- na_to_0(idat[icol_name])
+  }
+
   
   ## Get the first window start time for input into Cori.
   ## Must be >2. We delay until a sufficient number observed per day.
