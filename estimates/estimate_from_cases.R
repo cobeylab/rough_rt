@@ -10,7 +10,7 @@ library(EpiEstim)
 theme_set(theme_bw())
 
 ## Set the type of smoothing ----------------------------
-ts_colname = 'avg_7d'
+ts_colname = 'new_cases'
 #ts_colname = 'smoothed'
 cat(sprintf('Estimating from %s raw data', ts_colname))
 
@@ -35,23 +35,24 @@ source('../code/load_timeseries.R')
 dat <- load_idph_public_cases_restore_region()
 ## Visualize the case counts by restore region. (4 regions)
 dat %>%
+  pivot_longer(c(new_cases, smoothed, avg_7d)) %>%
   ggplot()+
-  geom_line(aes(x = date, y = new_cases))+
-  geom_line(aes(x = date, y = smoothed), color = 'red')+
-  geom_line(aes(x = date, y = avg_7d), color = 'blue')+
+  geom_line(aes(x = date, y = value, color = name), alpha = .6)+
   facet_wrap(.~region, scales = 'free_y')+
-  ggtitle('idph cases - public linelist')
+  scale_color_manual("", values = c('blue', 'gray', 'orange'))+
+  theme(legend.position = 'bottom')+
+  ggtitle('idph cases - public linelist - UIUC removed')
 ggsave(sprintf('../figs/%s/cases_restore_region.png', out_dir), height = 4, width = 7, units = 'in', dpi = 300)
 
 dat_11r<-load_idph_public_cases_covid_region()
 dat_11r %>%
   pivot_longer(c(new_cases, smoothed, avg_7d)) %>%
   ggplot()+
-  geom_line(aes(x = date, y = value, color = name))+
+  geom_line(aes(x = date, y = value, color = name), alpha = .6)+
   facet_wrap(.~region, scales = 'free_y')+
-  scale_color_manual("", values = c('cyan', 'darkblue', 'yellow'))+
+  scale_color_manual("", values = c('blue', 'gray', 'orange'))+
   theme(legend.position = 'bottom')+
-  ggtitle('idph cases - public linelist')
+  ggtitle('idph cases - public linelist - UIUC removed')
 ggsave(sprintf('../figs/%s/cases_covid_region.png', out_dir), height = 6, width = 7, units = 'in', dpi = 300)
 
 
@@ -73,7 +74,7 @@ rt_by_region <- function(rr, dat){
                          nboot = 500, 
                          ttl = rr, 
                          obs_type = 'cases',
-                         min_window = 1)
+                         min_window = 7)
   sprintf('%s - done\n', rr)
   return(out)
 }

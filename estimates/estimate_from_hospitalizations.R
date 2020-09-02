@@ -10,7 +10,7 @@ library(EpiEstim)
 theme_set(theme_bw())
 
 ## Set the type of smoothing ----------------------------
-ts_colname = 'avg_7d'
+ts_colname = 'nadmit'
 #ts_colname = 'smoothed'
 cat(sprintf('Estimating from %s raw data', ts_colname))
 
@@ -58,7 +58,7 @@ rt_by_region <- function(rr, dat){
                               nboot = 500, 
                               ttl = rr, 
                               obs_type = 'hospitalizations',
-                              min_window = 1)
+                              min_window = 7)
   sprintf('%s - done\n', rr)
   return(out)
 }
