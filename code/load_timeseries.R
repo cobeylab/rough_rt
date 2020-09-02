@@ -26,7 +26,8 @@ bind_rows(raw_dat, overall_dat) %>%
          avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
   filter(date <= max(date))%>%
   filter(date >= lubridate::as_date('2020-04-01')) %>%
-  mutate(new_cases = ifelse(new_cases<0, 0, new_cases))
+  mutate(new_cases = ifelse(new_cases<0, 0, new_cases)) %>%
+  ungroup()
 }
 
 
@@ -56,7 +57,8 @@ bind_rows(raw_dat_cr, overall_dat_cr)%>%
   filter(date <= max(date)) %>%
   mutate(region = factor(region, levels = c(as.character(1:11), 'IL_Overall'))) %>%
   filter(date >= lubridate::as_date('2020-04-01'))%>%
-  mutate(new_cases = ifelse(new_cases<0, 0, new_cases))
+  mutate(new_cases = ifelse(new_cases<0, 0, new_cases)) %>%
+  ungroup()
 }
 
 load_EPIC_admissions <- function(){
