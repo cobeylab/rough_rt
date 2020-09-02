@@ -40,10 +40,11 @@ load_idph_public_cases_covid_region <- function(){
 raw_dat_cr <- read_csv('../data/idph_public_covid_region.csv')  %>%
   rename(region = new_restore_region) %>%
   filter(region != 'unknown') %>%
+  mutate(region = toupper(region)) %>%
   group_by(date, region) %>%
   summarise(new_cases = sum(new_cases)) %>%
-  mutate(new_cases = ifelse(is.na(new_cases), 0, new_cases),
-         region = toupper(region)) 
+  mutate(new_cases = ifelse(is.na(new_cases), 0, new_cases))  %>%
+  ungroup
 overall_dat_cr <- raw_dat_cr %>%
   group_by(date) %>%
   summarise(region = 'IL_Overall',
@@ -55,10 +56,10 @@ bind_rows(raw_dat_cr, overall_dat_cr)%>%
   mutate(smoothed = smooth.spline(new_cases, spar = .6)$y %>% min_0,
          avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
   filter(date <= max(date)) %>%
+  ungroup() %>%
   mutate(region = factor(region, levels = c(as.character(1:11), 'IL_Overall'))) %>%
   filter(date >= lubridate::as_date('2020-04-01'))%>%
-  mutate(new_cases = ifelse(new_cases<0, 0, new_cases)) %>%
-  ungroup()
+  mutate(new_cases = ifelse(new_cases<0, 0, new_cases))
 }
 
 load_EPIC_admissions <- function(){
