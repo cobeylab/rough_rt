@@ -6,13 +6,14 @@ rt_boot <- function(
   GI_pars = c(parlist$true_mean_SI, parlist$true_var_SI) # Mean and sd of gamma GI
 ){
   
-  
-  
+  print("inside rt_boot")
+  print(ncol(infection_ests))
   ## Estimate Rt and mrege with the cleaned input data frame
-  library(doParallel)
-  cl <- makeCluster(parallel::detectCores()-1)
-  registerDoParallel(cl)
-  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %dopar% {
+#  library(doParallel)
+#  cl <- makeCluster(parallel::detectCores()-1)
+#  registerDoParallel(cl)
+
+  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %do% {
                         
                         ins = infection_ests[,c(1, ii)]
                         
@@ -24,11 +25,11 @@ rt_boot <- function(
                                  SI_mean = GI_pars[1], ## Rough estimates from Ganyani et al
                                  SI_var = GI_pars[2],   
                                  wend = F) %>%
-                          merge(select(ins, time), by = 'time') 
+                          merge(dplyr::select(ins, time), by = 'time') 
                         
                         df
                       }
-  stopCluster(cl)
+#  stopCluster(cl)
   
   ## For each date, get the median of means, the lower .025 of lower bounds and the upper .975 of upper bounds
   summarized_ests <-  bind_rows(est_list, .id = 'replicate') %>%

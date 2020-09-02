@@ -69,7 +69,7 @@ get_cori <- function(df.in,
   
   outs$R %>%
     mutate(time = if(wend == TRUE) t_end else ceiling((t_end+t_start)/2) ) %>%
-    select(time, `Mean(R)`, `Quantile.0.025(R)`, `Quantile.0.975(R)`) %>%
+    dplyr::select(time, `Mean(R)`, `Quantile.0.025(R)`, `Quantile.0.975(R)`) %>%
     setNames(c('time', paste0(out_name, '.mean'), paste0(out_name, '.025'), paste0(out_name, '.975')))
 }
 

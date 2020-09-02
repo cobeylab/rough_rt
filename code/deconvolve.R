@@ -2,6 +2,7 @@ deconvolve <- function(obs,  ## Vector of counts per day
                        times = NULL,  ## Optional numeric vector of times
                        delay_posterior,
                        delay_type = 'lognormal',
+                       p_obs = 1, #0 < p_obs <= 1
                        nboot = 20
 ){
   ## Check inputs
@@ -22,7 +23,7 @@ deconvolve <- function(obs,  ## Vector of counts per day
            times = times, 
            max_iter = 10,
            verbose = T,
-           p_delay = get_discrete_lognormal(k = 0:(length(obs)-1), mu = mm, sigma = ss)) %>%
+           p_delay = p_obs*get_discrete_lognormal(k = 0:(length(obs)-1), mu = mm, sigma = ss)) %>%
       filter(time >= 0)
   }, 
   mm = spars$mu, ss = spars$sigma, SIMPLIFY = FALSE)
@@ -31,7 +32,7 @@ deconvolve <- function(obs,  ## Vector of counts per day
     outs <- mapply(FUN = function(mm, vv){
       get_RL(observed = obs, 
              times = times, 
-             p_delay = discr_si(k = 0:(length(obs)-1), mu = mm, sigma = sqrt(vv))) %>%
+             p_delay = p_obs*discr_si(k = 0:(length(obs)-1), mu = mm, sigma = sqrt(vv))) %>%
         filter(time >= 0)
     }, 
     mm = spars$mean, vv = spars$var, SIMPLIFY = FALSE)
