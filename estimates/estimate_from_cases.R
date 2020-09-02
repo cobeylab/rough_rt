@@ -9,6 +9,9 @@ library(cowplot)
 library(EpiEstim)
 library(magic)
 theme_set(theme_bw())
+library(expm)
+library(MASS)
+library(matrixStats)
 
 ## Set the type of smoothing ----------------------------
 #ts_colname = 'avg_7d'
@@ -65,7 +68,7 @@ rt_by_region <- function(rr, dat){
   out = full_rt_pipeline(df = dat %>% filter(region == rr), 
                          obscolname = ts_colname,
                          p_obs = .15,
-                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2),
+                         delay_pars = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% dplyr::select(1:2),
                          delay_type = 'lognormal',
                          gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
                          nboot = 25, 
@@ -114,7 +117,7 @@ cori_by_region <- function(rr, dat){
   cat(sprintf('\nregion is %s, window is %.0f\n', rr, ww))
   
   ## Calculate the mean delay
-  md = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2) %>% 
+  md = read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% dplyr::select(1:2) %>% 
     mutate(mean = exp(mu+sigma^2/2)) %>% 
     pull(mean) %>% 
     mean
@@ -132,7 +135,7 @@ cori_by_region <- function(rr, dat){
              wend = F),
     by = 'time'
   ) %>%
-    select(-time) %>% ## Drop the arbitrary time vector
+    dplyr::select(-time) %>% ## Drop the arbitrary time vector
     mutate(window = ww,
            mean_delay = md) ## Create a column to record the window size
 }
