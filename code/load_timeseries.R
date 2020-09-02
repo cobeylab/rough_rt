@@ -83,7 +83,7 @@ load_EPIC_admissions <- function(){
            region = 'ALL_EPIC_HOSPITALS',
            date = as.Date(sprintf('%2i20-%2i-%2i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
     mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
-           avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(mean(nadmit[1:7], na.rm = T), 
+           avg_7d = zoo::rollmean(nadmit, k = 7, fill = c(mean(nadmit[1:7], na.rm = T), 
                                                              NA, 
                                                              mean(nadmit[length(nadmit)-(0:6)], na.rm = T)))
     )%>%
