@@ -23,7 +23,10 @@ bind_rows(raw_dat, overall_dat) %>%
   ungroup() %>% group_by(region) %>%
   arrange(date) %>%
   mutate(smoothed = smooth.spline(new_cases, spar = .6)$y %>% min_0,
-         avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
+         avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(mean(new_cases[1:7], na.rm = T), 
+                                                           NA, 
+                                                           mean(new_cases[length(new_cases)-(0:6)], na.rm = T)))
+  )%>%
   filter(date <= max(date))%>%
   filter(date >= lubridate::as_date('2020-04-01')) %>%
   mutate(new_cases = ifelse(new_cases<0, 0, new_cases)) %>%
@@ -54,7 +57,10 @@ bind_rows(raw_dat_cr, overall_dat_cr)%>%
   group_by(region) %>%
   arrange(date) %>%
   mutate(smoothed = smooth.spline(new_cases, spar = .6)$y %>% min_0,
-         avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(new_cases[1], NA, new_cases[length(new_cases)]))) %>%
+         avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(mean(new_cases[1:7], na.rm = T), 
+                                                           NA, 
+                                                           mean(new_cases[length(new_cases)-(0:6)], na.rm = T)))
+         )%>%
   filter(date <= max(date)) %>%
   ungroup() %>%
   mutate(region = factor(region, levels = c(as.character(1:11), 'IL_Overall'))) %>%
@@ -77,7 +83,10 @@ load_EPIC_admissions <- function(){
            region = 'ALL_EPIC_HOSPITALS',
            date = as.Date(sprintf('%2i20-%2i-%2i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
     mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
-           avg_7d = zoo::rollmean(nadmit, k = 7, fill = list(left = nadmit[1], center = NA, right = nadmit[length(nadmit)]), align = 'center'))  %>%
+           avg_7d = zoo::rollmean(new_cases, k = 7, fill = c(mean(new_cases[1:7], na.rm = T), 
+                                                             NA, 
+                                                             mean(new_cases[length(new_cases)-(0:6)], na.rm = T)))
+    )%>%
     select(-month,-day,-year) %>%
     ungroup() 
 }
