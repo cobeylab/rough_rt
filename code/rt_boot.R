@@ -9,11 +9,11 @@ rt_boot <- function(
   print("inside rt_boot")
   print(ncol(infection_ests))
   ## Estimate Rt and mrege with the cleaned input data frame
-#  library(doParallel)
-#  cl <- makeCluster(parallel::detectCores()-1)
-#  registerDoParallel(cl)
+  library(doParallel)
+  cl <- makeCluster(parallel::detectCores()-1)
+  registerDoParallel(cl)
 
-  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %do% {
+  est_list <- foreach(ii=2:ncol(infection_ests), .packages = c('dplyr', 'EpiEstim'), .export = c('get_cori', 'na_to_0', 'GI_pars')) %dopar% {
                         
                         ins = infection_ests[,c(1, ii)]
                         
@@ -29,7 +29,7 @@ rt_boot <- function(
                         
                         df
                       }
-#  stopCluster(cl)
+  stopCluster(cl)
   
   ## For each date, get the median of means, the lower .025 of lower bounds and the upper .975 of upper bounds
   summarized_ests <-  bind_rows(est_list, .id = 'replicate') %>%

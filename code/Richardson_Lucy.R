@@ -28,8 +28,8 @@ get_RL <- function(observed, ## Vector of observed cases. Let L = length(observe
                              times,    ## Vector of times of observations. Must be length L.
                              p_delay,  ## Vector of probabilities that the delay from infection to observation is 0, 1, ... days. Can be any length <= L. May not add to one (if not all cases are observed).
                              max_iter = 10,
-                             max_MCMC = 5, 
-                             burn_in_MCMC = 2,
+                             max_MCMC = 500, 
+                             burn_in_MCMC = 200,
                              out_col_name = 'RL_result',
                              right_censor = TRUE,
                              verbose = FALSE){
