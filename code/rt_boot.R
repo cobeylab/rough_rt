@@ -3,7 +3,7 @@ rt_boot <- function(
   p_obs,
   mean_delay=0,
   ww = 3,
-  GI_pars = c(parlist$true_mean_SI, parlist$true_var_SI) # Mean and sd of gamma GI
+  GI_pars = c(parlist$true_mean_GI, parlist$true_var_GI) # Mean and sd of gamma GI
 ){
   
   
@@ -20,8 +20,8 @@ rt_boot <- function(
                                  icol_name = paste0('infections.', ii-1), 
                                  window = ww, 
                                  out_name = 'rt',
-                                 SI_mean = GI_pars[1], ## Rough estimates from Ganyani et al
-                                 SI_var = GI_pars[2],   
+                                 GI_mean = GI_pars[1], ## Rough estimates from Ganyani et al
+                                 GI_var = GI_pars[2],   
                                  wend = F) %>%
                           merge(select(ins, time), by = 'time') 
                         

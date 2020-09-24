@@ -21,58 +21,190 @@ theme_set(theme_bw())
 knitr::opts_chunk$set(message = FALSE, echo = FALSE)
 ```
 
-## Extract SEIR simulation and plot.
-- Incidence here is observed at time of infection (S -> E).
 
 
+## Set observation delays
+```{r}
+true_delay_pars = c(1.52, sqrt(0.39)) # Incubation period from table 2 of Linton et al
+```
+
+
+## Visualize synthetic data
 ```{r echo = F}
+source('test_sample_size.R')
 source('../code/util.R')
 parlist <- read_rds('true_pars.rds')
-get_sim_df() %>%
+sim_df <- get_obs_ts(true_delay_pars)
+get_sim_df('stochastic') %>%
     filter(time < 300) %>%
 ggplot() +
   geom_line(aes(x = time, y = incidence))+
+  geom_line(data = sim_df, aes(x = time, y = incidence), color = 'deepskyblue')+
   geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
     geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
   ggtitle('Epidemic curve') -> inc
 
-get_sim_df() %>% 
+get_sim_df('stochastic') %>% 
   filter(time < 300) %>%
   ggplot()+
   geom_line(aes(x = time, y = true_rt)) +
+  geom_line(data = sim_df, aes(x = time, y = true_rt), color = 'deepskyblue') +
   geom_hline(aes(yintercept = 1), lty = 2)+
   ylab(expression(paste(R[t])))+
   ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
 
 cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
 
-sim_df <- get_sim_df()
+
+filter(sim_df, time <200 & time > 175)
 ```
 
-## Source the underlying function
-Function is printed below in case you want to look at the code
+## Get the times at which Rt crosses one
 ```{r}
-source('test_sample_size.R')
-print(test_sample_size)
+get_rt_cross_1_dates(sim_df)
+rt.rise.time = get_rt_cross_1_dates(sim_df) %>% slice(2) %>% pull(time)
 ```
-
-## Test 1
-Median of 10 obs per day
+## Test Cori method.
 ```{r}
-ss_10 <- test_sample_size(p_obs = NULL, ## Numeric. Must be a single numeric constant. Default is 1.
-                          median_cases_per_day = 10, ## If specified, overrides p_obs. The function will calculate the fraction observed to obtain the desired median.
-                          nboot = 10) ## Number of times to bootstrap over uncertainty in the delay parameters. Should really be higher than 10, but for testing I'm prioritizing speed.
-ss_10$rt_df
-ss_10$outplot
+source('../code/cori.R')
+test_cori <-  merge(
+  get_sim_df('stochastic'), 
+    get_cori(df.in = get_sim_df('stochastic'),
+         icol_name = 'incidence', 
+         out_name = 'test', 
+         window = 1, 
+         GI_mean = parlist$true_mean_GI, 
+         GI_var = parlist$true_var_GI, 
+         wend = F),
+  by = 'time', 
+  all = T)
+
+test_cori %>%
+  ggplot(aes(x = time))+
+  geom_line(aes(y = true_rt))+
+  geom_line(aes(y = test.mean), color = 'blue')
 ```
 
 
 
-## Test 2
-Median of 500 observations per day
+## Test 1 -
+
+
+* Truncate data so the last time of observation falls at the time Rt first rises back above 1, 7, 14 and 21 days later.
+* Estimate Rt using each truncated data set.
+* Plot results
+
+```{r error=FALSE, warning=FALSE}
+truncate.times <- rt.rise.time + c(0, 7, 14, 21)
+med_daily_obs <- c(500, 100, 50, 10)
+test_list = expand.grid(tt = truncate.times, med_cases = med_daily_obs)
+wrapper <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1, 
+                                                  median_cases_per_day = med_cases, 
+                                                  nboot = 10, 
+                                                  last_obs_time = tt, 
+                                                  true_delay_pars = true_delay_pars)}
+test1 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>% 
+  apply(2, bind_cols) %>% 
+  bind_rows() %>%
+  mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
+         median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
+write_rds(test1, path = 'test1.rds')
+```
+
+## Repeat with wider min window
+```{r, error=FALSE, warning=FALSE}
+wrapper2 <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1, 
+                                                  median_cases_per_day = med_cases, 
+                                                  nboot = 10, 
+                                                  last_obs_time = tt, 
+                                                  true_delay_pars = true_delay_pars,
+                                                  min_window = 7)}
+test2 <- mapply(FUN = wrapper2, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>% 
+  apply(2, bind_cols) %>% 
+  bind_rows() %>%
+  mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = T)),
+         median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = T)))
+write_rds(test2, path = 'test2.rds')
+```
+
+
 ```{r}
-ss_500 <- test_sample_size(median_cases_per_day = 500, 
-                           nboot = 10)
-ss_500$rt_df
-ss_500$outplot
+# Utility function for plotting
+set_ymx <- function(xx, ymax=2){ifelse(xx>ymax, ymax, xx)}
+tmin = 120
 ```
+
+## Plots
+
+1. Explain simulation
+
+```{r}
+sim_df %>%
+    filter(time < 250 & time > tmin) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_line(data = sim_df, aes(x = time, y = incidence), color = 'deepskyblue')+
+  #geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  #geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ylab('incident infections\nobserved + unobserved')+
+  ylim(c(0, 30000))+
+  ggtitle('Hypothetical epidemic') -> inc
+
+sim_df %>%
+    filter(time < 250 & time > tmin) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_line(data = sim_df, aes(x = time, y = true_rt), color = 'deepskyblue') +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste(R[t], ' values used to simulate epidemic'))) -> R0
+
+cowplot::plot_grid(inc, R0, align = 'hv', nrow = 2)
+```
+
+
+```{r}
+# test1 %>%
+#   filter(time>=tmin) %>%
+#   mutate_at(.vars = vars(starts_with('rt.')), set_ymx) %>%
+#   ggplot() +
+#   geom_hline(aes(yintercept = 1))+
+#   geom_line(aes(x = time, y = true_rt))+
+#   geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper, fill = last_day), alpha = .5)+
+#   geom_line(aes(x = time, y = rt.mean, color = last_day)) +
+#   geom_vline(aes(xintercept = as.numeric(as.character(last_day)), color = last_day))+
+#   scale_color_viridis_d(aesthetics = c('color', 'fill'))+
+#   facet_wrap(.~median_cases_per_day)
+```
+
+```{r}
+tt_labs = c('Rt crosses 1\n(t=195)', '+1 week', '+2 weeks', '+3 weeks')
+names(tt_labs) = c(195, 202, 209, 216)
+
+mm_labs = sprintf('Observe %.0f cases/day', med_daily_obs)
+names(mm_labs) = med_daily_obs
+
+## Get a data frame of gaps between last available Rt estimate and actual last date
+segment_df <- test2 %>%
+  group_by(median_cases_per_day, last_day) %>%
+  summarise(last_obs = unique(as.numeric(as.character(last_day))),
+            last_rt_est = max(time)) %>%
+  mutate(yy = .4+.05*(as.numeric(last_day)-2.5))
+
+test2 <- read_rds('test2.rds')
+test2 %>%
+  filter(time>=tmin) %>%
+  mutate_at(.vars = vars(starts_with('rt.')), set_ymx) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper, fill = last_day), alpha = .7)+
+  geom_line(aes(x = time, y = rt.mean, color = last_day)) +
+  geom_vline(aes(xintercept = as.numeric(as.character(last_day)), color = last_day), lty = 3)+
+  scale_color_viridis_d('Last observed date', aesthetics = c('color', 'fill'), labels = tt_labs)+
+  geom_line(data = sim_df, aes(x = time, y = true_rt))+
+  geom_segment(data = segment_df, aes(x = last_rt_est, xend = last_obs, y = yy, yend = yy, color = last_day))+
+  facet_wrap(.~median_cases_per_day, labeller = labeller(median_cases_per_day = mm_labs))+
+  xlim(c(tmin, 230))
+```
+
+
