@@ -19,7 +19,8 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
                       nboot = 500, ## Number of bootstraps
                       ttl = 'Data',
                       obs_type = 'cases',
-                      min_window = 1
+                      min_window = 1,
+                      w.tune = 50
                       ){
   
   ## Utility function
@@ -74,7 +75,7 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
     quantile(.2) %>%
     round %>%
     max(1)
-  ww.in = max(min_window, floor(50/low_inf_count))
+  ww.in = max(min_window, floor(w.tune/low_inf_count))
   cat(sprintf('\nwindow is %.0f\n', ww.in))
   
   
