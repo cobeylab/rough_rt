@@ -1,0 +1,153 @@
+---
+title: "Test sample size"
+output: html_notebook
+---
+
+Katie Gostic
+
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+```{r}
+## Preamble
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE, echo = FALSE)
+```
+
+
+
+## Set observation delays
+```{r}
+rdelay <- function(nn){
+  rlnorm(nn, meanlog = 1.52, sdlog = sqrt(0.39)) %>%  # Incubation period from table 2 of Linton et al.
+  #runif(nn, 1, 2) %>% ## 1-4d reporting delay
+  ceiling()
+}
+
+```
+
+
+## Visualize synthetic data
+```{r echo = F}
+source('test_sample_size.R')
+source('../code/util.R')
+parlist <- read_rds('true_pars.rds')
+sim_df <- get_obs_ts(rdelay)
+sim_df %>%
+    filter(time < 300) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_line(data = sim_df, aes(x = time, y = incidence), color = 'deepskyblue')+
+  geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+    geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ggtitle('Epidemic curve') -> inc
+
+sim_df %>% 
+  filter(time < 300) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_line(data = sim_df, aes(x = time, y = true_rt), color = 'deepskyblue') +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste('Underlying ', R[t], ' values'))) -> R0
+
+cowplot::plot_grid(R0, inc, align = 'hv', nrow = 2)
+
+
+filter(sim_df, time <200 & time > 175)
+```
+
+## Get the times at which Rt crosses one
+```{r}
+get_rt_cross_1_dates(sim_df)
+rt.rise.time = get_rt_cross_1_dates(sim_df) %>% slice(2) %>% pull(time)
+```
+Debug - Test Cori method.
+```{r}
+# source('../code/cori.R')
+# test_cori <-  merge(
+#   get_sim_df('stochastic'), 
+#     get_cori(df.in = get_sim_df('stochastic'),
+#          icol_name = 'incidence', 
+#          out_name = 'test', 
+#          window = 1, 
+#          GI_mean = parlist$true_mean_GI, 
+#          GI_var = parlist$true_var_GI, 
+#          wend = F),
+#   by = 'time', 
+#   all = T)
+# 
+# test_cori %>%
+#   ggplot(aes(x = time))+
+#   geom_line(aes(y = true_rt))+
+#   geom_line(aes(y = test.mean), color = 'blue')
+```
+
+
+
+## Test various sample sizes
+
+5000/d 
+2000/d - total observed in IL as of 25 Sept.
+500/d - total observed in Chicago as of 25 Sept
+100/d
+50/d
+10/d
+
+
+* Truncate data so the last time of observation falls at the time Rt first rises back above 1, 7, 14 and 21 days later.
+* Estimate Rt using each truncated data set.
+* Plot results
+
+
+## Run ss pipeline with 2d min window
+```{r error=FALSE, warning=FALSE}
+truncate.times <- 250 # rt.rise.time + c(0, 7, 14, 21)
+med_daily_obs <- c(4000, 2000, 500, 100, 50, 10)
+test_list = expand.grid(tt = truncate.times, med_cases = med_daily_obs)
+```
+
+```{r error=FALSE, warning=FALSE}
+wrapper1 <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1,
+                                                  median_cases_per_day = med_cases,
+                                                  nboot = 100,
+                                                  last_obs_time = tt,
+                                                  rdelay = rdelay,
+                                                  min_window = 2, 
+                                                  w.tune = 50,
+                                                  uncertainty = 'ss_pipeline'
+                                                  )}
+test1 <- mapply(FUN = wrapper1, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>%
+  apply(2, bind_cols) %>%
+  bind_rows() %>%
+  mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
+         median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
+write_rds(test1, path = 'results_sspipeline_2dminWindow.rds')
+```
+
+##  Run upscale pipeline with 2d min window
+```{r error=FALSE, warning=FALSE}
+wrapper2 <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1,
+                                                  median_cases_per_day = med_cases,
+                                                  nboot = 100,
+                                                  last_obs_time = tt,
+                                                  rdelay = rdelay,
+                                                  min_window = 1,
+                                                  w.tune = 50,
+                                                  uncertainty = 'upscale_pipeline'
+                                                  )}
+test2 <- mapply(FUN = wrapper2, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>%
+  apply(2, bind_cols) %>%
+  bind_rows() %>%
+  mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
+         median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
+write_rds(test2, path = 'results_upscalepipeline_2dminWindow.rds')
+```
+

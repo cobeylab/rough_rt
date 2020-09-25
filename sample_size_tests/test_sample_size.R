@@ -52,6 +52,16 @@ get_obs_ts <- function(rdelay,
 # w.tune = 100
 
 
+# p_obs = 1
+# median_cases_per_day = 50
+# nboot = 5
+# last_obs_time = 250
+# rdelay = rdelay
+# min_window = 2
+# w.tune = 100
+# uncertainty = 'upscale_pipeline'
+
+
 
 
 
@@ -61,7 +71,8 @@ test_sample_size_end_date <- function(p_obs = 1,
                                       last_obs_time = 210,
                                       rdelay,
                                       min_window = 1,
-                                      w.tune = 50
+                                      w.tune = 50,
+                                      uncertainty  = 'ss_pipeline'
 ){
   sim_df <- get_obs_ts(rdelay)
   source('../code/util.R')
@@ -77,7 +88,7 @@ test_sample_size_end_date <- function(p_obs = 1,
   ## 1.b Downsample to the desired probabilty of observation or sample size ----------
   if(length(median_cases_per_day)>0){
     raw = median(sim_df$cases)
-    p_obs <- median_cases_per_day/raw
+    p_obs <- min(1, median_cases_per_day/raw)
   }
   # sim_df$obs = sapply(sim_df$cases, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs)) #+ min_0(rnorm(nrow(sim_df)))
 
@@ -90,8 +101,21 @@ test_sample_size_end_date <- function(p_obs = 1,
   source('../code/cori.R')
   source('../code/upscale.R')
   source('../code/rt_boot.R')
-  source('../code/ss_pipeline.R')
-  rt_ests <- ss_pipeline(df = sim_df, 
+  ## Determine which pipeline to use
+  if(uncertainty == 'ss_pipeline'){
+    source('../code/ss_pipeline.R')
+    rt_fun <- ss_pipeline
+  }else if(uncertainty == 'upscale_pipeline'){
+    source('../code/rt_pipeline.R')
+    rt_fun <- upscale_cori_pipeline
+    sim_df$cases = sapply(sim_df$cases, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs)) #+ min_0(rnorm(nrow(sim_df)))
+    cat(sprintf('Setting p_obs=%1.3f to obtain a median of %1.0f cases per day\n', p_obs, median(sim_df$cases, na.rm = T)))
+    #cat(sprintf('pobs is %1.2f\n', p_obs))
+    cat(print(sim_df$cases))
+  }else{
+    error('invalid  uncertainty input. must be ss_pipeline or upscale_pipeline')
+  }
+  rt_ests <- rt_fun(df = sim_df, 
                                    obscolname = 'cases',
                                    p_obs = p_obs,
                                    delay_mean = delay_mean,
@@ -102,12 +126,6 @@ test_sample_size_end_date <- function(p_obs = 1,
                                    min_window = min_window,
                                    w.tune = w.tune)
   
-  ## Return
-  # list(df = merge(sim_df, 
-  #       rt_ests$df %>% select(date, contains('rt.')), 
-  #       by = 'date'),
-  #      plot = rt_ests$rt_plot
-  # )
   merge(sim_df, 
         rt_ests$df %>% select(date, contains('rt.')), 
         by = 'date') %>%

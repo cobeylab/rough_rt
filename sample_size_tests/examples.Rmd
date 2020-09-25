@@ -26,8 +26,8 @@ knitr::opts_chunk$set(message = FALSE, echo = FALSE)
 ## Set observation delays
 ```{r}
 rdelay <- function(nn){
-  rlnorm(nn, meanlog = 1.52, sdlog = sqrt(0.39)) + # Incubation period from table 2 of Linton et al.
-  runif(nn, 1, 2) %>% ## 1-4d reporting delay
+  rlnorm(nn, meanlog = 1.52, sdlog = sqrt(0.39)) %>%  # Incubation period from table 2 of Linton et al.
+  #runif(nn, 1, 2) %>% ## 1-4d reporting delay
   ceiling()
 }
 
@@ -94,6 +94,7 @@ Debug - Test Cori method.
 
 ## Test various sample sizes
 
+5000/d 
 2000/d - total observed in IL as of 25 Sept.
 500/d - total observed in Chicago as of 25 Sept
 100/d
@@ -105,64 +106,47 @@ Debug - Test Cori method.
 * Estimate Rt using each truncated data set.
 * Plot results
 
+
+## Run ss pipeline with 2d min window
 ```{r error=FALSE, warning=FALSE}
-# truncate.times <- 250 # rt.rise.time + c(0, 7, 14, 21)
-# med_daily_obs <- c(2000, 500, 100, 50, 10)
-# test_list = expand.grid(tt = truncate.times, med_cases = med_daily_obs)
-# wrapper <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1, 
-#                                                   median_cases_per_day = med_cases, 
-#                                                   nboot = 100, 
-#                                                   last_obs_time = tt, 
-#                                                   rdelay = rdelay,
-#                                                   min_window = 7)}
-# test1 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>% 
-#   apply(2, bind_cols) %>% 
-#   bind_rows() %>%
-#   mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
-#          median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
-# write_rds(test1, path = 'power_results_7dminWindow.rds')
-```
-
-
-## Repeat without 7d min window
-```{r error=FALSE, warning=FALSE}
-# truncate.times <- 250 # rt.rise.time + c(0, 7, 14, 21)
-# med_daily_obs <- c(2000, 500, 100, 50, 10)
-# test_list = expand.grid(tt = truncate.times, med_cases = med_daily_obs)
-# wrapper <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1, 
-#                                                   median_cases_per_day = med_cases, 
-#                                                   nboot = 100, 
-#                                                   last_obs_time = tt, 
-#                                                   rdelay = rdelay,
-#                                                   min_window = 1)}
-# test2 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>% 
-#   apply(2, bind_cols) %>% 
-#   bind_rows() %>%
-#   mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
-#          median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
-# #test2 %>% group_by(median_cases_per_day) %>% summarise(mt = max(time))
-# write_rds(test2, path = 'power_results_1dminWindow.rds')
-```
-
-## Tune up the smoothing window
-```{r, error=F, warning=F}
 truncate.times <- 250 # rt.rise.time + c(0, 7, 14, 21)
-med_daily_obs <- c(2000, 500, 100, 50, 10)
+med_daily_obs <- c(5000, 2000, 500, 100, 50, 10)
 test_list = expand.grid(tt = truncate.times, med_cases = med_daily_obs)
-wrapper <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1, 
-                                                  median_cases_per_day = med_cases, 
-                                                  nboot = 100, 
-                                                  last_obs_time = tt, 
+```
+
+```{r error=FALSE, warning=FALSE}
+wrapper1 <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1,
+                                                  median_cases_per_day = med_cases,
+                                                  nboot = 100,
+                                                  last_obs_time = tt,
                                                   rdelay = rdelay,
                                                   min_window = 2,
-                                                  w.tune = 100)}
-test2 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>% 
-  apply(2, bind_cols) %>% 
+                                                  uncertainty = 'ss_pipeline'
+                                                  )}
+test1 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>%
+  apply(2, bind_cols) %>%
   bind_rows() %>%
   mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
          median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
-#test2 %>% group_by(median_cases_per_day) %>% summarise(mt = max(time))
-write_rds(test2, path = 'power_results_1dminWindow_moreSmooth.rds')
+write_rds(test1, path = 'results_sspipeline_2dminWindow.rds')
+```
+
+##  Run upscale pipeline with 2d min window
+```{r error=FALSE, warning=FALSE}
+wrapper2 <- function(tt, med_cases){test_sample_size_end_date(p_obs = 1,
+                                                  median_cases_per_day = med_cases,
+                                                  nboot = 100,
+                                                  last_obs_time = tt,
+                                                  rdelay = rdelay,
+                                                  min_window = 1,
+                                                  uncertainty = 'upscale_pipeline'
+                                                  )}
+test2 <- mapply(FUN = wrapper, tt = test_list$tt, med_cases = test_list$med_cases, SIMPLIFY = 'list') %>%
+  apply(2, bind_cols) %>%
+  bind_rows() %>%
+  mutate(last_day = factor(last_day, levels = sort(truncate.times, decreasing = F)),
+         median_cases_per_day = factor(median_cases_per_day, levels = sort(med_daily_obs, decreasing = F)))
+write_rds(test2, path = 'results_upscalepipeline_2dminWindow.rds')
 ```
 
 
@@ -268,8 +252,8 @@ test2 %>%
   geom_line(aes(x = time, y = Rt, color = kind)) +
   scale_color_manual('', values = c('dodgerblue', 'black'), aesthetics = c('color', 'fill'), labels = c('estimate', 'actual'))+
   geom_line(data = sim_df, aes(x = time, y = true_rt))+
-  geom_vline(aes(xintercept = truncate.times), color = 'dodgerblue', lty = 2)+
-  geom_label(data = gapdf, aes(x = 200, y = 2, label = sprintf('%.0fd gap', gap))) +
+  #geom_vline(aes(xintercept = truncate.times), color = 'dodgerblue', lty = 2)+
+  #geom_label(data = gapdf, aes(x = 200, y = 2, label = sprintf('%.0fd gap', gap))) +
   #geom_segment(data = segment_df, aes(x = last_rt_est, xend = last_obs, y = yy, yend = yy, color = last_day))+
   facet_grid(.~median_cases_per_day, labeller = labeller(median_cases_per_day = mm_labs))+
   xlim(c(tmin, 250))+
@@ -319,7 +303,7 @@ test2 %>%
   summarise(detection_lag = unique(as.numeric(as.character(last_day)))-max(time),
             median_CI_width = median(rt.upper-rt.lower),
             lower_CI_width = quantile(rt.upper-rt.lower, probs = .025),
-            upper_CI_width = quantile(rt.upper-rt.lower, probs = .8),
+            upper_CI_width = quantile(rt.upper-rt.lower, probs = .5),
             highest.lt1 = 1-upper_CI_width/2,
             lowerst.ht1 = 1+upper_CI_width/2) -> stbl
 

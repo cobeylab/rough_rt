@@ -1,0 +1,175 @@
+---
+title: "Test sample size"
+output: html_notebook
+---
+
+Katie Gostic
+
+```{r asis = T}
+cat(sprintf('\n## Last run %s', Sys.Date()))
+```
+```{r}
+## Preamble
+rm(list = ls())
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(cowplot)
+library(EpiEstim)
+theme_set(theme_bw())
+knitr::opts_chunk$set(message = FALSE, echo = FALSE)
+
+## Load data
+rdelay <- function(nn){
+  rlnorm(nn, meanlog = 1.52, sdlog = sqrt(0.39)) %>%  # Incubation period from table 2 of Linton et al.
+  #runif(nn, 1, 2) %>% ## 1-4d reporting delay
+  ceiling()
+}
+source('test_sample_size.R')
+source('../code/util.R')
+parlist <- read_rds('true_pars.rds')
+sim_df <- get_obs_ts(rdelay)
+```
+
+
+## Plots - min window 7d
+
+```{r}
+# Utility function for plotting
+set_ymx <- function(xx, ymax=2){ifelse(xx>ymax, ymax, xx)}
+tmin = 125
+```
+
+
+1. Explain simulation
+
+```{r}
+sim_df %>%
+    filter(time < 250 & time > tmin) %>%
+ggplot() +
+  geom_line(aes(x = time, y = incidence))+
+  geom_line(data = sim_df, aes(x = time, y = incidence), color = 'deepskyblue')+
+  geom_line(data = sim_df, aes(x = time, y = delayed), lty = 2, color = 'blue3')+
+  #geom_vline(aes(xintercept = parlist$intervention_time_1), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  #geom_vline(aes(xintercept = parlist$intervention_time_2), lty = 2)+ ## Dahsed line where Rt starts to decrease
+  ylab('incident infections\nobserved + unobserved')+
+  ylim(c(0, 30000))+
+  ggtitle('Hypothetical epidemic') -> inc
+
+sim_df %>%
+    filter(time < 250 & time > tmin) %>%
+  ggplot()+
+  geom_line(aes(x = time, y = true_rt)) +
+  geom_line(data = sim_df, aes(x = time, y = true_rt), color = 'deepskyblue') +
+  geom_hline(aes(yintercept = 1), lty = 3)+
+  ylab(expression(paste(R[t])))+
+  ggtitle(expression(paste(R[t], ' values used to simulate epidemic'))) -> R0
+
+cowplot::plot_grid(inc, R0, align = 'hv', nrow = 2)
+ggsave('Hypothetical epidemic.png', width = 7, height = 4.5, dpi = 300)
+```
+
+
+```{r}
+# test1 %>%
+#   filter(time>=tmin) %>%
+#   mutate_at(.vars = vars(starts_with('rt.')), set_ymx) %>%
+#   ggplot() +
+#   geom_hline(aes(yintercept = 1))+
+#   geom_line(aes(x = time, y = true_rt))+
+#   geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper, fill = last_day), alpha = .5)+
+#   geom_line(aes(x = time, y = rt.mean, color = last_day)) +
+#   geom_vline(aes(xintercept = as.numeric(as.character(last_day)), color = last_day))+
+#   scale_color_viridis_d(aesthetics = c('color', 'fill'))+
+#   facet_wrap(.~median_cases_per_day)
+```
+
+```{r}
+plot_results <- function(testdf, plotname){
+
+med_daily_obs <- testdf %>% pull(median_cases_per_day) %>% as.character %>% as.numeric %>% unique()
+mm_labs = sprintf('%.0f', med_daily_obs)
+names(mm_labs) = med_daily_obs
+
+testdf %>%
+  filter(time>=tmin) %>%
+  mutate_at(.vars = vars(starts_with('rt.')), set_ymx) %>%
+  pivot_longer(c(rt.mean, true_rt), names_to = 'kind', values_to = 'Rt') %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 1), lty = 2)+
+  geom_ribbon(aes(x = time, ymin = rt.lower, ymax = rt.upper), alpha = .5, fill = 'dodgerblue')+
+  geom_line(aes(x = time, y = Rt, color = kind)) +
+  scale_color_manual('', values = c('dodgerblue', 'black'), aesthetics = c('color', 'fill'), labels = c('estimate', 'actual'))+
+  geom_line(data = sim_df, aes(x = time, y = true_rt))+
+  #geom_segment(data = segment_df, aes(x = last_rt_est, xend = last_obs, y = yy, yend = yy, color = last_day))+
+  facet_grid(.~median_cases_per_day, labeller = labeller(median_cases_per_day = mm_labs))+
+  xlim(c(tmin, 230))+
+  ylab('Rt')+
+  theme(legend.position = 'top') -> pp
+ggsave(filename = paste0(plotname, '.png'),  plot = pp, width = 7, height = 2.5, dpi = 300)
+return(pp)
+}
+```
+
+
+```{r}
+make_CI_plot <- function(testdf, plotname){
+
+testdf %>%
+  filter(time >= 125) %>%
+  group_by(median_cases_per_day, last_day) %>%
+  summarise(detection_lag = unique(as.numeric(as.character(last_day)))-max(time),
+            median_CI_width = median(rt.upper-rt.lower),
+            lower_CI_width = quantile(rt.upper-rt.lower, probs = .025),
+            upper_CI_width = quantile(rt.upper-rt.lower, probs = .8),
+            highest.lt1 = 1-upper_CI_width/2,
+            lowerst.ht1 = 1+upper_CI_width/2) -> stbl
+
+
+# stbl %>%
+#   ggplot()+
+#   geom_rect(aes(xmin = 0, xmax = 1, ymin = highest.lt1, ymax = lowerst.ht1, fill = median_cases_per_day), alpha = .7)+
+#   geom_segment((aes(x = 0, xend = 1, y = 1, yend = 1)))+
+#   ylim(c(0, 2.5))+
+#   scale_fill_viridis_d()
+
+stbl %>%
+  ggplot(aes(x = as.numeric(as.character(median_cases_per_day)), y = upper_CI_width)) +
+  geom_point() +
+  geom_line(lty = 2) +
+  ylab('CI width (80th percentile)')+
+  xlab('Median cases/day')+
+  ylim(c(0, 1)) -> pp
+ggsave(paste0(plotname, '80pctCI.png'), plot = pp, width = 2.5, height = 2.5, dpi = 300)
+return(list(table = stbl, plot = pp))
+}
+
+```
+
+
+## Plot ss pipeline results
+```{r}
+pp1<-plot_results(read_rds('results_sspipeline_2dminWindow.rds'), 'results_sspipeline_2dwindow')
+pp1
+
+CIplot <- make_CI_plot(read_rds('results_sspipeline_2dminWindow.rds'), 'CI_sspipeline_2dwindow')
+CIplot$plot
+CIplot$table
+```
+
+## Plot upscale pipeline results
+```{r}
+pp2<-plot_results(read_rds('results_upscalepipeline_2dminWindow.rds'), 'results_upscalepipeline_2dwindow')
+pp2
+
+CIplot <- make_CI_plot(read_rds('results_upscalepipeline_2dminWindow.rds'), 'CI_upscalepipeline_2dwindow')
+CIplot$plot
+CIplot$table
+```
+
+
+## Calculate mean delay 
+
+
+
