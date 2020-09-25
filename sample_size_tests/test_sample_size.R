@@ -6,7 +6,7 @@ get_rt_cross_1_dates <- function(sim_df){
 
 
 ## Given synthetic data and delays to observation, generate time series of observations
-get_obs_ts <- function(true_delay_pars,
+get_obs_ts <- function(rdelay,
                        mintime = 100, 
                        maxtime = 250,
                        st.date = '2020-06-15'){
@@ -18,7 +18,7 @@ get_obs_ts <- function(true_delay_pars,
   ##     Set the delay to observation
   source('../code/infer_times_of_infection_observation.R')
   # ## Write a function to draw delays for each individual in the data
-  rdelay <- function(nn){rlnorm(nn, true_delay_pars[1], true_delay_pars[2])}
+  #rdelay <- function(nn){rlnorm(nn, true_delay_pars[1], true_delay_pars[2])}
   ## Convolve to get synthetic times of observation
   sim_df <-  merge(
     sim_df %>% select(time, incidence, true_rt),
@@ -34,19 +34,36 @@ get_obs_ts <- function(true_delay_pars,
 
 
 
+# df = get_sim_df('stochastic') %>% mutate(date = as.Date('2020-02-01')+time)
+# obscolname = 'obs_cases'
+# gen_int_pars = c(8, 32)
+# ttl = ''
+# obs_type = 'cases'
+# p_obs = 1
+# median_cases_per_day = 50
+# nboot = 5
+# last_obs_time = 250
+# rdelay <- function(nn){
+#   rlnorm(nn, meanlog = 1.52, sdlog = sqrt(0.39)) %>% # Incubation period from table 2 of Linton et al.
+#     ceiling()
+# }
+# delay_mean = mean(rdelay(10000))
+# min_window = 2
+# w.tune = 100
 
 
 
 
 
 test_sample_size_end_date <- function(p_obs = 1, 
-                             median_cases_per_day = NULL, 
-                             nboot = 25,
-                             last_obs_time = 210,
-                             true_delay_pars,
-                             min_window = 1
+                                      median_cases_per_day = NULL, 
+                                      nboot = 5,
+                                      last_obs_time = 210,
+                                      rdelay,
+                                      min_window = 1,
+                                      w.tune = 50
 ){
-  sim_df <- get_obs_ts(true_delay_pars)
+  sim_df <- get_obs_ts(rdelay)
   source('../code/util.R')
   stopifnot(length(p_obs) == 0 | (p_obs <= 1 & p_obs >= 0))
   stopifnot((length(p_obs)>0)|length(median_cases_per_day)>0)
@@ -56,33 +73,34 @@ test_sample_size_end_date <- function(p_obs = 1,
   sim_df <- sim_df %>% 
     rename(cases = delayed) %>%
     filter(time <= last_obs_time) 
-
+  
   ## 1.b Downsample to the desired probabilty of observation or sample size ----------
   if(length(median_cases_per_day)>0){
-    raw = median(sim_df$delayed)
+    raw = median(sim_df$cases)
     p_obs <- median_cases_per_day/raw
   }
-  sim_df$obs = sapply(sim_df$delayed, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs)) #+ min_0(rnorm(nrow(sim_df)))
-  cat(sprintf('Setting p_obs=%.3f to obtain a median of %1.0f cases per day', p_obs, median(sim_df$obs)))
+  # sim_df$obs = sapply(sim_df$cases, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs)) #+ min_0(rnorm(nrow(sim_df)))
 
   
-
-  delay_mean = exp(true_delay_pars[1]+(true_delay_pars[2]^2)/2)
+  
+  
+  delay_mean = mean(rdelay(10000))
   
   ## Get Rt ests
   source('../code/cori.R')
   source('../code/upscale.R')
   source('../code/rt_boot.R')
-  source('../code/rt_pipeline.R')
-  rt_ests <- upscale_cori_pipeline(df = sim_df, 
-                                   obscolname = 'obs',
+  source('../code/ss_pipeline.R')
+  rt_ests <- ss_pipeline(df = sim_df, 
+                                   obscolname = 'cases',
                                    p_obs = p_obs,
                                    delay_mean = delay_mean,
                                    gen_int_pars = c(mean = parlist$true_mean_GI, var = parlist$true_var_GI), 
-                                   nboot = 50, 
+                                   nboot = nboot, 
                                    ttl = '', 
                                    obs_type = 'cases',
-                                   min_window = min_window)
+                                   min_window = min_window,
+                                   w.tune = w.tune)
   
   ## Return
   # list(df = merge(sim_df, 
@@ -93,6 +111,74 @@ test_sample_size_end_date <- function(p_obs = 1,
   merge(sim_df, 
         rt_ests$df %>% select(date, contains('rt.')), 
         by = 'date') %>%
-    mutate(last_day = last_obs_time, median_cases_per_day = median_cases_per_day)
+    mutate(last_day = last_obs_time, 
+           median_cases_per_day = median_cases_per_day,
+           delay_mean = delay_mean)
 }
 
+
+
+
+
+
+# test_sample_size_end_date <- function(p_obs = 1, 
+#                              median_cases_per_day = NULL, 
+#                              nboot = 5,
+#                              last_obs_time = 210,
+#                              rdelay,
+#                              min_window = 1,
+#                              w.tune = 50
+# ){
+#   sim_df <- get_obs_ts(rdelay)
+#   source('../code/util.R')
+#   stopifnot(length(p_obs) == 0 | (p_obs <= 1 & p_obs >= 0))
+#   stopifnot((length(p_obs)>0)|length(median_cases_per_day)>0)
+#   
+#   
+#   ## Truncate to last observed time
+#   sim_df <- sim_df %>% 
+#     rename(cases = delayed) %>%
+#     filter(time <= last_obs_time) 
+# 
+#   ## 1.b Downsample to the desired probabilty of observation or sample size ----------
+#   if(length(median_cases_per_day)>0){
+#     raw = median(sim_df$cases)
+#     p_obs <- median_cases_per_day/raw
+#   }
+#   sim_df$obs = sapply(sim_df$cases, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs)) #+ min_0(rnorm(nrow(sim_df)))
+#   cat(sprintf('Setting p_obs=%.3f to obtain a median of %1.0f cases per day', p_obs, median(sim_df$obs)))
+# 
+#   
+# 
+#   delay_mean = mean(rdelay(10000))
+#   
+#   ## Get Rt ests
+#   source('../code/cori.R')
+#   source('../code/upscale.R')
+#   source('../code/rt_boot.R')
+#   source('../code/rt_pipeline.R')
+#   rt_ests <- upscale_cori_pipeline(df = sim_df, 
+#                                    obscolname = 'obs',
+#                                    p_obs = p_obs,
+#                                    delay_mean = delay_mean,
+#                                    gen_int_pars = c(mean = parlist$true_mean_GI, var = parlist$true_var_GI), 
+#                                    nboot = nboot, 
+#                                    ttl = '', 
+#                                    obs_type = 'cases',
+#                                    min_window = min_window,
+#                                    w.tune = w.tune)
+#   
+#   ## Return
+#   # list(df = merge(sim_df, 
+#   #       rt_ests$df %>% select(date, contains('rt.')), 
+#   #       by = 'date'),
+#   #      plot = rt_ests$rt_plot
+#   # )
+#   merge(sim_df, 
+#         rt_ests$df %>% select(date, contains('rt.')), 
+#         by = 'date') %>%
+#     mutate(last_day = last_obs_time, 
+#            median_cases_per_day = median_cases_per_day,
+#            delay_mean = delay_mean)
+# }
+# 
