@@ -71,10 +71,10 @@ bind_rows(raw_dat_cr, overall_dat_cr)%>%
 load_EPIC_admissions <- function(){
   ## Load the public linelist data by restore region ------------
   ## More up to date, public linelist
-  read_csv('../data/EPIC_AdmissionsCountsByAgeDate.csv') %>%
-    rename(age = AgeCategory, 
-           date = AdmitDate,
-           nadmit = NumberOfAdmissions) %>%
+  read_csv('../data/cli_region11.csv') %>%
+    mutate(date = format(as.Date(date), "%m/%d/%y")) %>%
+    rename(
+           nadmit = cli) %>%
     group_by(date) %>%
     summarise(nadmit = sum(nadmit)) %>%
     ungroup %>%
@@ -88,5 +88,25 @@ load_EPIC_admissions <- function(){
                                                              mean(nadmit[length(nadmit)-(0:6)], na.rm = T)))
     )%>%
     select(-month,-day,-year) %>%
+    ungroup() 
+}
+
+
+load_cli <- function(){
+  ## Load the public linelist data by restore region ------------
+  ## More up to date, public linelist
+  read.csv('./cli_admissions.csv') %>%
+    mutate(date = as.Date(date)) %>%
+    rename(
+           nadmit = cli,
+           region = covid_region) %>%
+    mutate(nadmit = ifelse(is.na(nadmit), 0, nadmit)) %>%
+    group_by(region) %>%
+    arrange(date) %>%
+    mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
+           avg_7d = zoo::rollmean(nadmit, k = 7, fill = c(mean(nadmit[1:7], na.rm = T), 
+                                                             NA, 
+                                                             mean(nadmit[length(nadmit)-(0:6)], na.rm = T)))
+    )%>%
     ungroup() 
 }
