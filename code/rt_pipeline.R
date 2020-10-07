@@ -28,6 +28,7 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
     num_dates = date_to_num(min(dates)):date_to_num(max(dates))
     num_to_date(num_dates)
   }
+  cat(sprintf('%2.2f', p_obs))
   
   ## Check inputs
   df <- as.data.frame(df)

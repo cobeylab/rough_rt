@@ -63,6 +63,17 @@ get_obs_ts <- function(rdelay,
 
 
 
+# p_obs = 0.3
+# median_cases_per_day = NULL
+# nboot = 5
+# last_obs_time = tt
+# rdelay = rdelay
+# min_window = 1
+# w.tune = 50
+# uncertainty = 'ss_pipieline'
+
+
+
 
 
 test_sample_size_end_date <- function(p_obs = 1, 

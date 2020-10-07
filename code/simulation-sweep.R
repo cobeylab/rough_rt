@@ -9,9 +9,11 @@ source('../code/simulation.R')
 ## Save outputs to a new directory
 ## Input PARAMS is a list with elements:
 
-sim_sweep <- function(PARAMS){
+sim_sweep <- function(PARAMS, dirname = NULL){
   
-  dirname <- sprintf("R0-%.1f", PARAMS$pre_intervention_R0)
+  if(length(dirname) < 1){
+    dirname <- sprintf("R0-%.1f", PARAMS$pre_intervention_R0)
+  }
   if(!dir.exists(dirname)){
     sprintf('creating new output directory, %s', dirname)
     dir.create(dirname)
