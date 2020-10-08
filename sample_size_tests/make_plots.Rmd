@@ -142,6 +142,8 @@ stbl %>%
   xlab('Median cases/day')+
   ylim(c(0, 1)) -> pp
 ggsave(paste0(plotname, '80pctCI.png'), plot = pp, width = 2.5, height = 2.5, dpi = 300)
+
+
 return(list(table = stbl, plot = pp))
 }
 
@@ -156,6 +158,20 @@ pp1
 CIplot <- make_CI_plot(read_rds('results_sspipeline_2dminWindow.rds'), 'CI_sspipeline_2dwindow')
 CIplot$plot
 CIplot$table
+
+CIplot$table %>%
+  mutate(rt_lower = 1-upper_CI_width/2,
+         rt_upper = 1+upper_CI_width/2) %>%
+  pivot_longer(c(rt_lower, rt_upper)) %>%
+  ggplot(aes(x = as.numeric(as.character(median_cases_per_day)), y = value, group = name))+
+  geom_ribbon(aes(ymin = value, ymax = ifelse(name == 'rt_lower', .3, 1.7)), fill = 'gray') +
+  geom_line()+
+  geom_point()+
+  geom_text(aes(x = 3000, y = 1.5, label = 'Can conclude Rt > 1.\nEpidemic is growing.'))+
+    geom_text(aes(x = 3000, y = .5, label = 'Can conclude Rt < 1.\nEpidemic is shrinking.'))+
+    geom_text(aes(x = 500, y = 1, label = 'No conclusion.\nCIs overlap 1.'))+
+  ylab('True Rt')+
+  xlab('Median cases/day')
 ```
 
 ## Plot upscale pipeline results

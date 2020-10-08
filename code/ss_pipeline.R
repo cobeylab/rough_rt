@@ -1,13 +1,24 @@
-df = sim_df 
-obscolname = 'cases'
-p_obs = p_obs
-delay_mean = delay_mean
-gen_int_pars = c(mean = parlist$true_mean_GI, var = parlist$true_var_GI)
-nboot = 5
-ttl = ''
-obs_type = 'cases'
-min_window = min_window
-w.tune = w.tune
+# df = sim_df 
+# obscolname = 'cases'
+# p_obs = p_obs
+# delay_mean = delay_mean
+# gen_int_pars = c(mean = parlist$true_mean_GI, var = parlist$true_var_GI)
+# nboot = 5
+# ttl = ''
+# obs_type = 'cases'
+# min_window = min_window
+# w.tune = w.tune
+
+# df = sim_df
+# obscolname = 'cases'
+# p_obs = p_obs
+# delay_mean = delay_mean
+# gen_int_pars = c(mean = parlist$true_mean_GI, var = parlist$true_var_GI)
+# nboot = nboot
+# ttl = ''
+# obs_type = 'cases'
+# min_window = min_window
+# w.tune = w.tune
 
 
 ss_pipeline <- function(df, ## Data frame containing time series of observations
@@ -61,13 +72,12 @@ ss_pipeline <- function(df, ## Data frame containing time series of observations
   #                 obs_colname = 'shifted',
   #                 n_replicates = nboot) 
     one_downsample = function(xx){sapply(xx, FUN = function(NN) rbinom(n=1, size = NN, prob = p_obs))}
-    downsampled <- replicate(n = nboot, expr = one_downsample(sim_df[,obscolname]))
+    downsampled <- replicate(n = nboot, expr = one_downsample(df$shifted), simplify = 'array')
     colnames(downsampled) = paste('infections', 1:nboot, sep = '.')
-    cat(sprintf('Setting p_obs=%.3f to obtain a median of %1.0f cases per day', p_obs, median(downsampled)))
     downsampled <- bind_cols(df, as.data.frame(downsampled))
   }else{
     stopifnot(abs(p_obs-1) < 1e-6)
-    upscaled <- df %>% mutate(infections.1 = shifted)
+    downsampled <- df %>% mutate(infections.1 = shifted)
   }
 
 
@@ -81,6 +91,11 @@ ss_pipeline <- function(df, ## Data frame containing time series of observations
     quantile(.2) %>%
     round %>%
     max(1)
+  
+  cat(sprintf('Setting p_obs=%.3f to obtain a median of %1.0f cases per day', p_obs, select(downsampled, contains('infections.')) %>%
+                pivot_longer(everything()) %>%
+                filter(!is.na(value) & value>0) %>%
+                pull(value) %>% median))
   ww.in = max(min_window, floor(w.tune/low_inf_count))
   cat(sprintf('\nwindow is %.0f\n', ww.in))
   
@@ -97,6 +112,7 @@ ss_pipeline <- function(df, ## Data frame containing time series of observations
   outs <- df %>% merge(rt_ests$summary, by = c('date', 'time')) 
 
   
-  return(list(df = outs))
+  return(list(df = outs,
+              downsamples = downsampled))
   
 }

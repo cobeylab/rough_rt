@@ -151,3 +151,16 @@ test2 <- mapply(FUN = wrapper2, tt = test_list$tt, med_cases = test_list$med_cas
 write_rds(test2, path = 'results_upscalepipeline_2dminWindow.rds')
 ```
 
+## Run with p = 0.3
+```{r}
+pobs0.3 <- test_sample_size_end_date(p_obs = 0.3,
+                          median_cases_per_day = NULL,
+                          nboot = 100,
+                          last_obs_time = 250,
+                          rdelay = rdelay,
+                          min_window = 1,
+                          w.tune = 50,
+                          uncertainty = 'ss_pipeline'
+)
+```
+
