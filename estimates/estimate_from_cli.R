@@ -55,6 +55,9 @@ mean_delay <- read_rds('../data/fitted_delays/delay_infection_to_hosp_admit_post
   pull(mean) %>%
   mean() %>% round()
 
+## Load Ganyani GI pars
+GI_parlist <- read_rds('../data/GI_pars_Ganyani.rds')
+
 ## Estimate Rt by region ------------------------------
 rt_by_region <- function(rr, dat){
   cat(sprintf('region is %s\n', rr))
@@ -62,7 +65,7 @@ rt_by_region <- function(rr, dat){
                               obscolname = ts_colname,
                               p_obs = reporting_frac,
                               delay_mean = mean_delay,
-                              gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
+                              gen_int_pars = c(mean = GI_parlist$mean, var = GI_parlist$sd^2), ## From Ganyani et al
                               nboot = 500, 
                               ttl = rr, 
                               obs_type = 'hospitalizations',

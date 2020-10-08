@@ -11,8 +11,12 @@ get_cori <- function(df.in,
                      icol_name, 
                      out_name = 'Cori',
                      window = 1, 
-                     GI_mean=parlist$true_mean_GI, 
-                     GI_var=2*(parlist$true_mean_GI/2)^2,
+                     GI_mean, 
+                     GI_var,
+                     GI_min_mean = 1.85,
+                     GI_max_mean = 5.60,
+                     GI_min_sd = 0.87,
+                     GI_max_sd = 5.43,
                      wend = TRUE){
   
   df.in <- df.in %>% mutate(cori_time = 1:nrow(.))
@@ -33,19 +37,21 @@ get_cori <- function(df.in,
   ts <- ts[ts > 1 & ts <= (max(ts)-window+1)]
   te <- ts+(window-1)
   
+  
+  
   estimate_R(
     incid = pull(idat, !!icol_name),
     method = "uncertain_si",
     config = make_config(
       list(
         mean_si = GI_mean,
-        min_mean_si = GI_mean -1,
-        max_mean_si = GI_mean + 1,
+        min_mean_si = GI_max_mean,
+        max_mean_si = GI_min_mean,
         std_mean_si = 1.5,
         std_std_si = 1.5,
         std_si = sqrt(GI_var),
-        min_std_si = sqrt(GI_var)*.8,
-        max_std_si = sqrt(GI_var)*1.2,
+        min_std_si = GI_max_sd,
+        max_std_si = GI_min_sd,
         n1 = 50,
         n2 = 100, 
         t_start=ts,
