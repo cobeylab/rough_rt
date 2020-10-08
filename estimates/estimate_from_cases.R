@@ -16,6 +16,7 @@ cat(sprintf('Estimating from %s raw data', ts_colname))
 
 ## Set the name of the output directory ---------------------------------
 out_dir <- paste('cases', ts_colname, Sys.Date(), sep = '_')
+#out_dir <- paste('cases', ts_colname, '2020-08-26_retrospective', sep = '_')
 if(!dir.exists(sprintf('../figs/%s/', out_dir))) dir.create(sprintf('../figs/%s/', out_dir))
 
 source('../code/util.R')
