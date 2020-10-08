@@ -95,12 +95,22 @@ load_EPIC_admissions <- function(){
 load_cli <- function(){
   ## Load the public linelist data by restore region ------------
   ## More up to date, public linelist
-  read.csv('./cli_admissions.csv') %>%
+  region_cli = read.csv('../data/cli_admissions.csv') %>%
     mutate(date = as.Date(date)) %>%
     rename(
-           nadmit = cli,
-           region = covid_region) %>%
+           nadmit = cli) %>%
+    mutate(
+           region = as.character(covid_region)) %>%
     mutate(nadmit = ifelse(is.na(nadmit), 0, nadmit)) %>%
+    select(-covid_region)
+
+  statewide_cli = region_cli %>%
+  group_by(date) %>%
+  summarise(region = 'illinois',
+            nadmit = sum(nadmit)) %>%
+  ungroup()
+
+  bind_rows(region_cli, statewide_cli) %>%
     group_by(region) %>%
     arrange(date) %>%
     mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
