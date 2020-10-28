@@ -3,7 +3,7 @@ rt_boot <- function(
   p_obs,
   mean_delay=0,
   ww = 3,
-  GI_pars = c(parlist$true_mean_GI, parlist$true_var_GI) # Mean and sd of gamma GI
+  GI_pars = c(parlist$true_mean_GI, parlist$true_var_GI) # Mean and var of gamma GI
 ){
   
   

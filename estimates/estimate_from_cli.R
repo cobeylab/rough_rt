@@ -55,6 +55,9 @@ mean_delay <- read_rds('../data/fitted_delays/delay_infection_to_hosp_admit_post
   pull(mean) %>%
   mean() %>% round()
 
+## Load Ganyani GI pars
+GI_parlist <- read_rds('../data/GI_pars_Ganyani.rds')
+
 ## Estimate Rt by region ------------------------------
 rt_by_region <- function(rr, dat){
   cat(sprintf('region is %s\n', rr))
@@ -62,7 +65,7 @@ rt_by_region <- function(rr, dat){
                               obscolname = ts_colname,
                               p_obs = reporting_frac,
                               delay_mean = mean_delay,
-                              gen_int_pars = c(mean = 4.5, var = 1.7), ## From Ganyani et al
+                              gen_int_pars = c(mean = GI_parlist$mean, var = GI_parlist$sd^2), ## From Ganyani et al
                               nboot = 500, 
                               ttl = rr, 
                               obs_type = 'hospitalizations',
@@ -94,7 +97,7 @@ plot_summary <- function(estlist, fname){
                                ll$upscale_plot+theme(legend.position = 'none')+ggtitle(nm)
                              }, ll = estlist, nm = names(estlist), SIMPLIFY = F),
                            ncol = 1)
-  p2 <- cowplot::plot_grid(plotlist = lapply(estlist, function(ll) ll$rt_plot + ylim(c(0,3))),
+  p2 <- cowplot::plot_grid(plotlist = lapply(estlist, function(ll) ll$rt_plot + ylim(c(0,5))),
                            ncol = 1)
   ggsave(sprintf('../figs/%s/%s', out_dir, fname), 
          cowplot::plot_grid(

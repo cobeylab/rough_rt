@@ -35,7 +35,6 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
   df$obs <- df[,obscolname]
   df$obs <- round(df$obs)
   df$obs <- na_to_0(df$obs)
-  if(!any(grepl('time', names(df)))) df$time <- as.numeric(df$date-min(df$date))
   stopifnot('obs' %in% colnames(df))
   stopifnot(p_obs >0 & p_obs <= 1)
   stopifnot(delay_mean>0)
@@ -51,11 +50,19 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
   
   
   ## 3. Shift timeseries by mean delay
+  # Add in appropriate times before the first observation according to the mean delay
+  new_times = data.frame(date = as.Date(min(df$date)) - 1:round(delay_mean), 
+    region=unique(df$region)[1])
   df <- df %>%
+    full_join(new_times) %>%
     arrange(date) %>%
     complete(date = get_complete_dates(date)) %>%
     mutate(shifted = lead(obs, round(delay_mean)))
+  if(!any(grepl('time', names(df)))) df$time <- as.numeric(df$date-min(df$date))
   
+  # Get cutoff date for Rt at beginning of timeseries
+  cutoff = min(df$date) + 8
+
   ## 4. Repeatedly upscale shifted time series
   if(p_obs < 1){
   upscaled <- est_total_inf(df, 
@@ -76,10 +83,12 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
     quantile(.2) %>%
     round %>%
     max(1)
-  ww.in = max(min_window, floor(w.tune/low_inf_count))
+  #ww.in = max(min_window, floor(w.tune/low_inf_count))
+  # set window to 7
+  ww.in = 7
   cat(sprintf('\nwindow is %.0f\n', ww.in))
   
-  
+
   rt_ests <- rt_boot(infection_ests = upscaled %>% select(time, contains('infections')),
                      p_obs = p_obs, 
                      ww = ww.in,
@@ -109,6 +118,7 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
   
   rt_plot <- df %>%
     merge(rt_ests$summary, by = 'date') %>% 
+    filter(date>cutoff) %>%
     ggplot()+
     geom_ribbon(aes(x = date, ymin = rt.lower, ymax = rt.upper), fill = 'dodgerblue', alpha = .5)+
     geom_line(aes(x = date, y = rt.mean), color = 'blue3')+
@@ -128,7 +138,8 @@ upscale_cori_pipeline <- function(df, ## Data frame containing time series of ob
   #  clip_end_dates <- c('clip.50' = filter(c_p_obs, p_report <= .5)%>%tail(1)%>%pull(dd),
   #                      'clip.90' = filter(c_p_obs, p_report <= .9)%>%tail(1)%>%pull(dd))
   
-  outs <- df %>% merge(rt_ests$summary, by = c('date', 'time')) 
+  outs <- df %>% merge(rt_ests$summary, by = c('date', 'time')) %>%
+      filter(date>cutoff)
   
  # %>% mutate(robustness = ifelse(date <= (max(date)-clip_end_dates['clip.90']), 'robust', 
   #                              ifelse(date <= (max(date)-clip_end_dates['clip.50']), 'partial data', 'unreliable'))) -> outs
