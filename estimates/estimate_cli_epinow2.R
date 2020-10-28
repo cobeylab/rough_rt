@@ -6,14 +6,21 @@ library(tidyr)
 library(readr)
 library(cowplot)
 library(EpiEstim)
+library(optparse)
 theme_set(theme_bw())
 source('../code/util.R')
 source('../code/load_timeseries.R')
 dt <- max(load_cli()$date) ## Use the last date in the timeseries to set the output folder name.
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
-midway = FALSE
 
+
+## Read in options from midway
+option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_job_number"),
+                   make_option("--midway", type = "character", default=NULL, help="are we running on midway")); 
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
+midway = ifelse(length(opt$midway)>0, TRUE, FALSE)
 
 
 ## Load data --------------------------------------------
@@ -41,10 +48,9 @@ get_region <- function(rr){
 
 
 regions = unique(dat$region)
-if(slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID") > 1){ ## If running on midway
-  cat(sprintf('SLURM Array task id is %.0f', slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")))
-  midway = TRUE
-  regions = regions[slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")-1] ## Only run for the current slurm array task id
+if(midway){ ## If running on midway
+  cat('midway is true\n')
+  regions = regions[opt$var] ## Only run for the current slurm array task id
 } ## Else, run for all regions.
 
 for(region.in in regions){
