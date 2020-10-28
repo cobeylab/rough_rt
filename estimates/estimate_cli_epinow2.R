@@ -53,7 +53,7 @@ if(midway){ ## If running on midway
   regions = regions[opt$var] ## Only run for the current slurm array task id
 } ## Else, run for all regions.
 
-for(region.in in regions){
+for(region.in in regions[12]){
   cat(sprintf('Running for region %s', region.in))
   dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
   run_epinow2(dat_df = get_region(region.in),

@@ -18,7 +18,7 @@ cd /project2/cobey/covid-modeling/rt-pipeline-09-2020/estimates/
 module load R/4.0.0
 
 ## Get latest data
-cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions.csv ../data/cli_hosp.csv 
+cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2929-10-28.csv ../data/cli_admissions_latest.csv 
 
 ## Run the Rt estimation pipeline
 
