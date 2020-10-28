@@ -13,7 +13,7 @@ get_cori <- function(df.in,
                      window = 1, 
                      GI_mean, 
                      GI_var,
-                     GI_min_mean = 1.85,
+                     GI_min_mean = 1.85,  ## From Ganyani et al., Table 3
                      GI_max_mean = 5.60,
                      GI_min_sd = 0.87,
                      GI_max_sd = 5.43,

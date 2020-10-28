@@ -14,32 +14,37 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                           mean_sd = EpiNow2::covid_incubation_period[1,]$mean_sd,
                           sd = EpiNow2::covid_incubation_period[1,]$sd,
                           sd_sd = EpiNow2::covid_incubation_period[1,]$sd_sd,
-                          max = 30)
+                          max = 30,
+                          notes = sprintf('From EpiNow2::covid_incubation_period list. Source = %s', EpiNow2::covid_incubation_period[1,]$source))
   
   generation_time <- list(mean = EpiNow2::covid_generation_times[1, ]$mean,
                           mean_sd = EpiNow2::covid_generation_times[1, ]$mean_sd,
                           sd = EpiNow2::covid_generation_times[1, ]$sd,
                           sd_sd = EpiNow2::covid_generation_times[1, ]$sd_sd,
-                          max = 30)
+                          max = 30,
+                          notes = sprintf('From EpiNow2::covid_generation_timeslist. Source = %s', EpiNow2::covid_generation_times[1,]$source))
 
   
   case_rep_delay <- list(mean = .1, ## Very rough estimates based on carline 
                           mean_sd = .5, 
                           sd = 1,
                           sd_sd = .5,
-                          max = 30)
+                          max = 30,
+                         notes = 'From rough estimates based on carline data.')
   
   death_rep_delay <- list(mean = 2.86, ## From Linton et al. Table 2 (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)
                           mean_sd = 1.98,   
                           sd = 0.53,
                           sd_sd = 2.03,
-                          max = 30)
+                          max = 30,
+                          notes = 'From Linton et al. Table 2. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
   
   hospital_rep_delay <- list(mean = 2.21, ## Fitted to HK data, similar to Linton et al
                          mean_sd = 0.1, 
                          sd = 0.49,
                          sd_sd = 0.1,
-                         max = 30)
+                         max = 30,
+                         notes = 'Ffrom fits to HK data. Results were similar to Linton et al. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
   
   stopifnot(dat_type %in% c('cases', 'deaths', 'hospitalizations'))
   if(dat_type == 'cases')   delay <- case_rep_delay  
@@ -58,16 +63,17 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
   xx = seq(0, 30, by = 0.01)
   ## Reporting delay --
   plot(xx, dlnorm(xx, delay$mean, delay$sd), 
-       type = 'l', main = 'assumed reporting delay', xlab = 'days', ylab = 'dens')
+       type = 'l', main = sprintf('Rep. delay (lognormal) logmean=%2.2f, logsd=%2.2f\nsource - %s', delay$mean, delay$sd, delay$notes), 
+       xlab = 'days', ylab = 'dens')
   ## Generation interval ---
   plot(xx, 
        dgamma(xx, shape = with(generation_time, get_shape(mean, sd^2)), 
               rate = with(generation_time, get_rate(mean, sd^2))), 
-       type = 'l', main = 'assumed generation time', xlab = 'days', ylab = 'dens')
+       type = 'l', main = sprintf('Gen int. (gamma) mean=%2.2f, sd=%2.2f\nsource - %s', generation_time$mean, generation_time$sd, generation_time$notes),  xlab = 'days', ylab = 'dens')
   ## Incubation period --
   plot(xx, 
        dlnorm(xx, incubation_period$mean, incubation_period$sd), 
-       type = 'l', main = 'assumed incubation time', xlab = 'days', ylab = 'dens')
+       type = 'l', main = sprintf('Incubation (lognormal) mean=%2.2f, sd=%2.2f\nsource - %s', incubation_period$mean, incubation_period$sd, incubation_period$notes), xlab = 'days', ylab = 'dens')
   dev.off()
   
   
