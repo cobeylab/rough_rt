@@ -95,7 +95,7 @@ load_EPIC_admissions <- function(){
 load_cli <- function(){
   ## Load the public linelist data by restore region ------------
   ## More up to date, public linelist
-  region_cli = read.csv('../data/cli_admissions.csv') %>%
+  region_cli = read.csv('../data/cli_hosp.csv') %>%
     mutate(date = as.Date(date)) %>%
     rename(
            nadmit = cli) %>%

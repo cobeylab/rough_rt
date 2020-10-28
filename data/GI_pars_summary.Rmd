@@ -1,0 +1,36 @@
+---
+title: "Define GI pars"
+output: html_notebook
+---
+
+## Parameterize the GI based on Ganyani et al. estimates
+
+## Focus on Table 3, which allows neg. SIs
+
+```{r}
+GI_pars_GanyaniT3 <- data_frame(mean = c(3.86, 2.90),
+                      sd = c(2.65, 2.86),
+                      mean_sd = c((5.6-2.2)/2/1.96, (4.12-1.85)/2/1.96),
+                      sd_sd = c((5.43-0.87)/2/1.96, (5.04-1.37)/2/1.96))
+
+GI_pars_GanyaniT3
+```
+## Summarise
+```{r}
+GI_pars_summary <- GI_pars_GanyaniT3 %>% summarise(mean = mean(mean),
+                                sd = mean(sd),
+                                mean_sd = mean(mean_sd),
+                                sd_sd = mean(sd_sd))
+GI_pars_summary
+```
+
+## Compare to Epinow2 inputs
+```{r}
+EpiNow2::covid_generation_times
+```
+
+## Save inputs
+```{r}
+write_rds(GI_pars_summary, 'GI_pars_Ganyani.rds')
+```
+
