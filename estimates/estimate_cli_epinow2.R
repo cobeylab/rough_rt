@@ -12,6 +12,7 @@ source('../code/load_timeseries.R')
 dt <- max(load_cli()$date) ## Use the last date in the timeseries to set the output folder name.
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
+midway = FALSE
 
 
 
@@ -40,7 +41,9 @@ get_region <- function(rr){
 
 
 regions = unique(dat$region)
-if(slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")== 1){ ## If running on midway
+if(slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID") > 1){ ## If running on midway
+  cat(sprintf('SLURM Array task id is %.0f', Slurm_env(x="SLURM_ARRAY_TASK_ID")))
+  midway = TRUE
   regions = regions[slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")-1] ## Only run for the current slurm array task id
 } ## Else, run for all regions.
 
@@ -51,5 +54,6 @@ for(region.in in regions){
               obs_colname = 'nadmit',
               dat_type = 'hospitalizations',
               prior_smoothing_window = 1,
+              midway = midway,
               output_folder = sprintf('%s/%s', outpath, region.in))
 }
