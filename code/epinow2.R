@@ -107,7 +107,7 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                                     generation_time = generation_time,
                                     reporting_delay = delay,
                                     incubation_period = incubation_period, 
-                                    prior_smoothing_window = prior_smoothing_window,
+                                   # prior_smoothing_window = prior_smoothing_window,
                                     rt_prior = list(mean = 2, sd = 1), horizon = 0,
                                     samples = 2000, warmup = 500, cores = 4,
                                     chains = 4, verbose = TRUE,
