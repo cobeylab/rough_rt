@@ -41,7 +41,7 @@ get_region <- function(rr){
 
 regions = unique(dat$region)
 if(slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")== 1){ ## If running on midway
-  regions = regions[slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")] ## Only run for the current slurm array task id
+  regions = regions[slurmR::Slurm_env(x="SLURM_ARRAY_TASK_ID")-1] ## Only run for the current slurm array task id
 } ## Else, run for all regions.
 
 for(region.in in regions){
