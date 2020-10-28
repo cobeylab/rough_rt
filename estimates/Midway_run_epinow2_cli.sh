@@ -22,4 +22,4 @@ cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions.csv ..
 
 ## Run the Rt estimation pipeline
 
-Rscript estimate_cli_epinow2.R
+Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE
