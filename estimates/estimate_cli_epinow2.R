@@ -33,7 +33,7 @@ dat %>%
   facet_wrap(.~region, scales = 'free_y')+
   scale_color_manual("", values = c('black', 'red', 'yellow'))+
   theme(legend.position = 'bottom')+
-  ggtitle('idph cases - public linelist')
+  ggtitle(sprintf('CLI up to %s', dt))
 ggsave(sprintf('%s/%s/cli_input.png', outpath, dt))
 
 ## Estimate rt using epinow2
@@ -53,7 +53,7 @@ if(midway){ ## If running on midway
   regions = regions[opt$var] ## Only run for the current slurm array task id
 } ## Else, run for all regions.
 
-for(region.in in regions[12]){
+for(region.in in regions){
   cat(sprintf('Running for region %s', region.in))
   dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
   run_epinow2(dat_df = get_region(region.in),
