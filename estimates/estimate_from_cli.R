@@ -27,14 +27,40 @@ source('../code/rt_pipeline.R')
 source('../code/upscale.R')
 source('../code/rt_boot.R')
 
+load_cli <- function(){
+  ## Load the public linelist data by restore region ------------
+  ## More up to date, public linelist
+  region_cli = read.csv('../data/cli_admissions_2020-10-28.csv') %>%
+    mutate(date = as.Date(date)) %>%
+    rename(
+           nadmit = cli) %>%
+    mutate(
+           region = as.character(covid_region)) %>%
+    mutate(nadmit = ifelse(is.na(nadmit), 0, nadmit)) %>%
+    select(-covid_region)
 
+  statewide_cli = region_cli %>%
+  group_by(date) %>%
+  summarise(region = 'illinois',
+            nadmit = sum(nadmit)) %>%
+  ungroup()
+
+  bind_rows(region_cli, statewide_cli) %>%
+    group_by(region) %>%
+    arrange(date) %>%
+    mutate(smoothed = smooth.spline(nadmit, spar = .5)$y %>% min_0,
+           avg_7d = zoo::rollmean(nadmit, k = 7, fill = c(mean(nadmit[1:7], na.rm = T), 
+                                                             NA, 
+                                                             mean(nadmit[length(nadmit)-(0:6)], na.rm = T)))
+    )%>%
+    ungroup() 
+}
 
 
 
 
 
 ## Load data --------------------------------------------
-source('../code/load_timeseries.R')
 dat <- load_cli()
 print(head(dat))
 ## Visualize the case counts by restore region. (4 regions)

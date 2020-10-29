@@ -10,6 +10,10 @@
 #SBATCH --partition=cobey
 
 
+## #SBATCH --qos=covid-19
+## #SBATCH --account=covid-19 -p broadwl
+
+
 ## Set working directory
 cd /project2/cobey/covid-modeling/rt-pipeline-09-2020/estimates/
 

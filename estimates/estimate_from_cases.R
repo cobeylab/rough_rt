@@ -33,18 +33,6 @@ source('../code/rt_boot.R')
 
 ## Load data --------------------------------------------
 source('../code/load_timeseries.R')
-dat <- load_idph_public_cases_restore_region()
-## Visualize the case counts by restore region. (4 regions)
-dat %>%
-  pivot_longer(c(new_cases, smoothed, avg_7d)) %>%
-  ggplot()+
-  geom_line(aes(x = date, y = value, color = name), alpha = .6)+
-  facet_wrap(.~region, scales = 'free_y')+
-  scale_color_manual("", values = c('blue', 'gray', 'orange'))+
-  theme(legend.position = 'bottom')+
-  ggtitle('idph cases - public linelist - UIUC removed')
-ggsave(sprintf('../figs/%s/cases_restore_region.png', out_dir), height = 4, width = 7, units = 'in', dpi = 300)
-
 dat_11r<-load_idph_public_cases_covid_region()
 dat_11r %>%
   pivot_longer(c(new_cases, smoothed, avg_7d)) %>%
@@ -58,10 +46,7 @@ ggsave(sprintf('../figs/%s/cases_covid_region.png', out_dir), height = 6, width 
 
 
 ## Calculate the mean delay
-mean_delay <- read_rds('../data/fitted_delays/delay_infection_to_report_posterior.rds') %>% bind_cols %>% select(1:2) %>%
-  mutate(mean = exp(mu+sigma^2/2)) %>%
-  pull(mean) %>%
-  mean() %>% round()
+mean_delay <- round(12.11358)
 
 
 ## Load GI pars from Ganyani table 3
@@ -73,7 +58,7 @@ rt_by_region <- function(rr, dat){
   cat(sprintf('restore region is %s\n', rr))
   out = upscale_cori_pipeline(df = dat %>% filter(region == rr), 
                          obscolname = ts_colname,
-                         p_obs = .15,
+                         p_obs = .25,
                          delay_mean = mean_delay,
                          gen_int_pars = c(mean = GI_parlist$mean, var = GI_parlist$sd^2), ## From Ganyani et al
                          nboot = 500, 
@@ -84,16 +69,6 @@ rt_by_region <- function(rr, dat){
   return(out)
 }
 
-
-## 1. by restore(4) region ------------------------------
-#Takes a few minutes to run, depending on size of nboot
-#Can't be parallelized because internal operations are already running in parallel
-restore_region_estimates <- lapply(unique(dat$region), rt_by_region, dat = dat) 
-names(restore_region_estimates)  = unique(dat$region)
-
-pdf(file = sprintf('../figs/%s/restore_region_rt_from_idph_cases.pdf', out_dir))
-lapply(restore_region_estimates, function(ll) cowplot::plot_grid(ll$upscale_plot + theme(legend.position = c(.8, .8)), ll$rt_plot, ncol = 1)) 
-dev.off()
 
 ## 2. by covid (11) region ------------------------------
 #Takes a few minutes to run, depending on size of nboot
@@ -128,12 +103,9 @@ plot_summary <- function(estlist, fname){
 
 
 ## Save results ------------------------------------
-write_csv(lapply(restore_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/shift_pipeline_cases_restore_region.csv', out_dir))
 write_csv(lapply(covid_region_estimates, function(ll) ll$df) %>% bind_rows(.id = 'region'), sprintf('../figs/%s/shift_pipeline_cases_covid_region.csv', out_dir))
-write_rds(restore_region_estimates, sprintf('../figs/%s/shift_pipeline_cases_restore_region.rds', out_dir))
 write_rds(covid_region_estimates, sprintf('../figs/%s/shift_pipeline_cases_covid_region.rds', out_dir))
 
 ## Generate plots
-plot_summary(restore_region_estimates, 'restore_region_summary.png')
 plot_summary(covid_region_estimates[1:6], 'covid_region_1-6_summary.png')
 plot_summary(covid_region_estimates[7:12], 'covid_region_7-ILOverall_summary.png')
