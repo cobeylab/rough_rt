@@ -17,7 +17,7 @@ tooday <- Sys.Date()
 
 
 ## Read in options from midway
-option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_job_number"),
+option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
                    make_option("--midway", type = "character", default=NULL, help="are we running on midway")); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
@@ -66,6 +66,7 @@ for(region.in in regions){
 }
 
 
-## Reformat estimates and save to ../figs folder with epiestim analogs
-source('../code/summarise-epinow2-estimates.R')
-summarise_all_estimates(outpath, dt, tooday)
+write_rds(list(outpath=outpath,
+               dt=dt,
+               today=tooday),
+          path = sprintf('run_params.rds'))
