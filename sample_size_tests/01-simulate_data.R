@@ -9,17 +9,17 @@ library(ggplot2)
 ## Set parameters to simulate SEIR epidemic
 parlist <- {
   list(
-    N = 7e6, #total population size
+    N = 1e5, #total population size
     E_init = 0,
-    I_init = 60,
+    I_init = 30,
     t_E = 4, # mean time in E (latent period)
     t_I = 4, # mean time in I (duration of infectiousness)
-    n_t = 300, # total timesteps
+    n_t = 150, # total timesteps
     pre_intervention_R0 = 1.7, # Initial R0 before interventions
     intervention_R0 = 0.9, # Final R0 after interventions
-    partially_lifeted_R0 = 1.4,
-    intervention_time_1 = 100, # Timepoint at which intervention starts (at which underlying transmission rate begins to fall)
-    intervention_time_2 = 100+75,
+    partially_lifeted_R0 = 1.3,
+    intervention_time_1 = 30, # Timepoint at which intervention starts (at which underlying transmission rate begins to fall)
+    intervention_time_2 = 30+61,
     days_intervention_to_min = c(7), # Days from intervention start until transmission rate hits min_R0
     days_to_Rt_rise = 30,
     model_types = c('seir'), # Can also choose sir

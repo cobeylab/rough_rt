@@ -7,8 +7,8 @@ get_rt_cross_1_dates <- function(sim_df){
 
 ## Given synthetic data and delays to observation, generate time series of observations
 get_obs_ts <- function(rdelay,
-                       mintime = 100, 
-                       maxtime = 250,
+                       mintime = 10, 
+                       maxtime = 149,
                        st.date = '2020-06-15'){
   sim_df <- get_sim_df('stochastic')
   sim_df$incidence <- na_to_0(sim_df$incidence)

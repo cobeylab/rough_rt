@@ -15,7 +15,7 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
   incubation_period$notes = 'lauer et al'
   # See EpiNow2::incubation_periods for source info
   
-  generation_time <- EpiNow2::get_generation_time('SARS_CoV_2', source = 'ganyani')
+  generation_time <- EpiNow2::get_generation_time('SARS-CoV-2', source = 'ganyani')
   generation_time$notes = 'ganyani et al'
   ## See EpiNow2::generation_intervals for source info
   
@@ -89,9 +89,9 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                                   prior_smoothing_window = prior_smoothing_window,
                                   rt_prior = list(mean = 2, sd = 1), horizon = 0,
                                   samples = if(dbug) 10 else 2000, 
-                                  warmup = if(dbug) 10 else 500, 
-                                  cores = 4,
-                                  chains = 4, verbose = TRUE,
+                                  #warmup = if(dbug) 10 else 500, 
+                                  #cores = 4,
+                                  #chains = 4, verbose = TRUE,
                                   target_folder = paste0(output_folder))
   
   
