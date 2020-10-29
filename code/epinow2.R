@@ -1,9 +1,9 @@
 
-run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic data
-                        obs_colname, # Name of column holding observations
+run_epinow2 <- function(dat_df,  # Data used in estimation
+                        obs_colname, # Name of column holding observations within data_df
                         dat_type, # Can be 'cases', 'deaths' or 'hospitalizations'
                         prior_smoothing_window = 7, # Smoothing window to use on the prior. Default is 7
-                        debug = FALSE,
+                        dbug = FALSE, # If true, run really short chains.
                         #midway = FALSE,
                         output_folder = 'rough-rt-approach'){
   
@@ -12,11 +12,11 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
   
   ## Set delay distributions for input into EpiNow2 -------------------------------------------
   incubation_period <- list(mean = EpiNow2::covid_incubation_period[1,]$mean, # gamma
-                          mean_sd = EpiNow2::covid_incubation_period[1,]$mean_sd,
-                          sd = EpiNow2::covid_incubation_period[1,]$sd,
-                          sd_sd = EpiNow2::covid_incubation_period[1,]$sd_sd,
-                          max = 30,
-                          notes = sprintf('From EpiNow2::covid_incubation_period list. Source = %s', EpiNow2::covid_incubation_period[1,]$source))
+                            mean_sd = EpiNow2::covid_incubation_period[1,]$mean_sd,
+                            sd = EpiNow2::covid_incubation_period[1,]$sd,
+                            sd_sd = EpiNow2::covid_incubation_period[1,]$sd_sd,
+                            max = 30,
+                            notes = sprintf('From EpiNow2::covid_incubation_period list. Source = %s', EpiNow2::covid_incubation_period[1,]$source))
   
   generation_time <- list(mean = EpiNow2::covid_generation_times[1, ]$mean,
                           mean_sd = EpiNow2::covid_generation_times[1, ]$mean_sd,
@@ -24,13 +24,13 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                           sd_sd = EpiNow2::covid_generation_times[1, ]$sd_sd,
                           max = 30,
                           notes = sprintf('From EpiNow2::covid_generation_timeslist. Source = %s', EpiNow2::covid_generation_times[1,]$source))
-
+  
   
   case_rep_delay <- list(mean = .1, ## Very rough estimates based on carline 
-                          mean_sd = .5, 
-                          sd = 1,
-                          sd_sd = .5,
-                          max = 30,
+                         mean_sd = .5, 
+                         sd = 1,
+                         sd_sd = .5,
+                         max = 30,
                          notes = 'From rough estimates based on carline data.')
   
   death_rep_delay <- list(mean = 2.86, ## From Linton et al. Table 2 (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)
@@ -41,23 +41,23 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                           notes = 'From Linton et al. Table 2. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
   
   hospital_rep_delay <- list(mean = 2.21, ## Fitted to HK data, similar to Linton et al
-                         mean_sd = 0.1, 
-                         sd = 0.49,
-                         sd_sd = 0.1,
-                         max = 30,
-                         notes = 'Ffrom fits to HK data. Results were similar to Linton et al. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
+                             mean_sd = 0.1, 
+                             sd = 0.49,
+                             sd_sd = 0.1,
+                             max = 30,
+                             notes = 'Ffrom fits to HK data. Results were similar to Linton et al. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
   
   stopifnot(dat_type %in% c('cases', 'deaths', 'hospitalizations'))
   if(dat_type == 'cases')   delay <- case_rep_delay  
   if(dat_type == 'deaths')   delay <- death_rep_delay 
   if(dat_type == 'hospitalizations')   delay <- hospital_rep_delay 
-    
+  
   
   write_rds(generation_time, sprintf('%s/gen_interval.rds', output_folder))
   write_rds(incubation_period, sprintf('%s/incubation_pd.rds', output_folder))
   write_rds(delay, sprintf('%s/delay.rds', output_folder))
-
-
+  
+  
   # Plot the specified distributions
   png(sprintf('%s/figs/specified_distributions.png', output_folder), width = 7, height = 7, units = 'in', res = 300)
   par(mfrow = c(2,2))
@@ -88,18 +88,19 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
   }
   
   
-  if(!debug){
-    ## Fit to synthetic case observations
-    rt_estimates <- EpiNow2::epinow(reported_cases = format_dat(obs_colname, dat_df), 
-                                      generation_time = generation_time,
-                                      delays = list(reporting_delay = delay,
-                                                    incubation_period = incubation_period), 
-                                      prior_smoothing_window = prior_smoothing_window,
-                                      rt_prior = list(mean = 2, sd = 1), horizon = 0,
-                                      samples = 2000, warmup = 500, cores = 4,
-                                      chains = 4, verbose = TRUE,
-                                      target_folder = paste0(output_folder))
-  }
+  ## Fit to synthetic case observations
+  rt_estimates <- EpiNow2::epinow(reported_cases = format_dat(obs_colname, dat_df), 
+                                  generation_time = generation_time,
+                                  delays = list(reporting_delay = delay,
+                                                incubation_period = incubation_period), 
+                                  prior_smoothing_window = prior_smoothing_window,
+                                  rt_prior = list(mean = 2, sd = 1), horizon = 0,
+                                  samples = if(dbug) 10 else 2000, 
+                                  warmup = if(dbug) 10 else 500, 
+                                  cores = 4,
+                                  chains = 4, verbose = TRUE,
+                                  target_folder = paste0(output_folder))
+  
   
   # if(!debug & midway){
   #   ## Fit to synthetic case observations
