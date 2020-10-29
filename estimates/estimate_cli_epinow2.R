@@ -13,6 +13,7 @@ source('../code/load_timeseries.R')
 dt <- max(load_cli()$date) ## Use the last date in the timeseries to set the output folder name.
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
+tooday <- Sys.Date()
 
 
 ## Read in options from midway
@@ -63,3 +64,8 @@ for(region.in in regions){
               midway = midway,
               output_folder = sprintf('%s/%s', outpath, region.in))
 }
+
+
+## Reformat estimates and save to ../figs folder with epiestim analogs
+source('../code/summarise-epinow2-estimates.R')
+summarise_all_estimates(outpath, dt, tooday)
