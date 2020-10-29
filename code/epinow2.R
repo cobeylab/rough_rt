@@ -11,20 +11,13 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
   if(!dir.exists(paste0(output_folder, '/figs'))){dir.create(paste0(output_folder, '/figs'))}
   
   ## Set delay distributions for input into EpiNow2 -------------------------------------------
-  incubation_period <- list(mean = EpiNow2::covid_incubation_period[1,]$mean, # gamma
-                            mean_sd = EpiNow2::covid_incubation_period[1,]$mean_sd,
-                            sd = EpiNow2::covid_incubation_period[1,]$sd,
-                            sd_sd = EpiNow2::covid_incubation_period[1,]$sd_sd,
-                            max = 30,
-                            notes = sprintf('From EpiNow2::covid_incubation_period list. Source = %s', EpiNow2::covid_incubation_period[1,]$source))
+  incubation_period <- EpiNow2::get_incubation_period('SARS-CoV-2', 'lauer')
+  incubation_period$notes = 'lauer et al'
+  # See EpiNow2::incubation_periods for source info
   
-  generation_time <- list(mean = EpiNow2::covid_generation_times[1, ]$mean,
-                          mean_sd = EpiNow2::covid_generation_times[1, ]$mean_sd,
-                          sd = EpiNow2::covid_generation_times[1, ]$sd,
-                          sd_sd = EpiNow2::covid_generation_times[1, ]$sd_sd,
-                          max = 30,
-                          notes = sprintf('From EpiNow2::covid_generation_timeslist. Source = %s', EpiNow2::covid_generation_times[1,]$source))
-  
+  generation_time <- EpiNow2::get_generation_time('SARS_CoV_2', source = 'ganyani')
+  generation_time$notes = 'ganyani et al'
+  ## See EpiNow2::generation_intervals for source info
   
   case_rep_delay <- list(mean = .1, ## Very rough estimates based on carline 
                          mean_sd = .5, 
@@ -45,7 +38,7 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                              sd = 0.49,
                              sd_sd = 0.1,
                              max = 30,
-                             notes = 'Ffrom fits to HK data. Results were similar to Linton et al. (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)')
+                             notes = 'From HK data. Results were similar to Linton et al.')
   
   stopifnot(dat_type %in% c('cases', 'deaths', 'hospitalizations'))
   if(dat_type == 'cases')   delay <- case_rep_delay  
