@@ -13,10 +13,11 @@ source('../code/load_timeseries.R')
 dt <- max(load_cli()$date) ## Use the last date in the timeseries to set the output folder name.
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
+tooday <- Sys.Date()
 
 
 ## Read in options from midway
-option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_job_number"),
+option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
                    make_option("--midway", type = "character", default=NULL, help="are we running on midway")); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
@@ -63,3 +64,9 @@ for(region.in in regions){
               midway = midway,
               output_folder = sprintf('%s/%s', outpath, region.in))
 }
+
+
+write_rds(list(outpath=outpath,
+               dt=dt,
+               today=tooday),
+          path = sprintf('run_params.rds'))
