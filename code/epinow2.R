@@ -3,9 +3,10 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                         obs_colname, # Name of column holding observations within data_df
                         dat_type, # Can be 'cases', 'deaths' or 'hospitalizations'
                         prior_smoothing_window = 7, # Smoothing window to use on the prior. Default is 7
-                        dbug = FALSE, # If true, run really short chains.
+                        dbug, # If true, run really short chains.
                         #midway = FALSE,
                         output_folder = 'rough-rt-approach'){
+  
   
   if(!dir.exists(output_folder)){dir.create(output_folder)}
   if(!dir.exists(paste0(output_folder, '/figs'))){dir.create(paste0(output_folder, '/figs'))}
@@ -87,11 +88,12 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                                   delays = list(reporting_delay = delay,
                                                 incubation_period = incubation_period), 
                                   prior_smoothing_window = prior_smoothing_window,
-                                  rt_prior = list(mean = 2, sd = 1), horizon = 0,
-                                  samples = if(dbug) 10 else 2000, 
-                                  #warmup = if(dbug) 10 else 500, 
-                                  #cores = 4,
-                                  #chains = 4, verbose = TRUE,
+                                  rt_prior = list(mean = 2, sd = 1), 
+                                  horizon = 0,
+                                  samples = ifelse(dbug, 10, 2000), 
+                                  stan_args = list(warmup = ifelse(dbug, 10, 200), 
+                                                   control = list(adapt_delta = 0.9),
+                                                   cores = 4),
                                   target_folder = paste0(output_folder))
   
   
