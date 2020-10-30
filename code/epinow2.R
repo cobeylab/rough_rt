@@ -3,10 +3,11 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                         obs_colname, # Name of column holding observations
                         dat_type, # Can be 'cases', 'deaths' or 'hospitalizations'
                         prior_smoothing_window,
-                        debug = FALSE,
-                        midway = FALSE,
-                        output_folder = 'rough-rt-approach'){
+                        #midway = FALSE,
+                        output_folder = 'rough-rt-approach',
+                        dbug=FALSE){
   
+  if(dbug){output_folder = paste0(output_folder, '/debug')}
   if(!dir.exists(output_folder)){dir.create(output_folder)}
   if(!dir.exists(paste0(output_folder, '/figs'))){dir.create(paste0(output_folder, '/figs'))}
   
@@ -88,7 +89,7 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
   }
   
   
-  if(!debug & !midway){
+
     ## Fit to synthetic case observations
     rt_estimates <- EpiNow2::epinow(reported_cases = format_dat(obs_colname, dat_df), 
                                       generation_time = generation_time,
@@ -96,21 +97,27 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                                                     incubation_period = incubation_period), 
                                       prior_smoothing_window = prior_smoothing_window,
                                       rt_prior = list(mean = 2, sd = 1), horizon = 0,
-                                      samples = 2000, warmup = 500, cores = 4,
-                                      chains = 4, verbose = TRUE,
-                                      target_folder = paste0(output_folder))
-  }
+                                      samples = if(dbug) 10 else 2000, 
+                                      warmup = if(dbug) 10 else 500, 
+                                      cores = 4,
+                                      chains = 4, 
+                                      verbose = TRUE,
+                                      target_folder = output_folder)
+
   
-  if(!debug & midway){
-    ## Fit to synthetic case observations
-    rt_estimates <- EpiNow2::epinow(reported_cases = format_dat(obs_colname, dat_df), 
-                                    generation_time = generation_time,
-                                    reporting_delay = delay,
-                                    incubation_period = incubation_period, 
-                                   # prior_smoothing_window = prior_smoothing_window,
-                                    rt_prior = list(mean = 2, sd = 1), horizon = 0,
-                                    samples = 2000, warmup = 500, cores = 4,
-                                    chains = 4, verbose = TRUE,
-                                    target_folder = paste0(output_folder))
-  }
+  # if(!debug & midway){
+  #   ## Fit to synthetic case observations
+  #   rt_estimates <- EpiNow2::epinow(reported_cases = format_dat(obs_colname, dat_df), 
+  #                                   generation_time = generation_time,
+  #                                   reporting_delay = delay,
+  #                                   incubation_period = incubation_period, 
+  #                                  # prior_smoothing_window = prior_smoothing_window,
+  #                                   rt_prior = list(mean = 2, sd = 1), horizon = 0,
+  #                                   samples = if(dbug) 10 else 2000, 
+  #                                   warmup = if(dbug) 10 else 500, 
+  #                                   cores = 4,
+  #                                   chains = 4, 
+  #                                   verbose = TRUE,
+  #                                   target_folder = paste0(output_folder))
+  # }
 }

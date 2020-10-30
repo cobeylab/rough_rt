@@ -17,7 +17,8 @@ dir_check(sprintf('%s/%s', outpath, dt))
 
 ## Read in options from midway
 option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_job_number"),
-                   make_option("--midway", type = "character", default=NULL, help="are we running on midway")); 
+                   make_option("--midway", type = "character", default=NULL, help="are we running on midway"),
+                   make_option(--debug, type = 'logical', default=FALSE, help='if true, run a 20-step chain and exit.')); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
 midway = ifelse(length(opt$midway)>0, TRUE, FALSE)
@@ -60,6 +61,6 @@ for(region.in in regions){
               obs_colname = 'nadmit',
               dat_type = 'hospitalizations',
               prior_smoothing_window = 1,
-              midway = midway,
-              output_folder = sprintf('%s/%s', outpath, region.in))
+              output_folder = sprintf('%s/%s', outpath, region.in),
+              dbug=opt$debug)
 }
