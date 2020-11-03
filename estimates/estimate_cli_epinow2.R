@@ -56,11 +56,16 @@ if(midway){ ## If running on midway
 
 for(region.in in regions){
   cat(sprintf('Running for region %s', region.in))
-  dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
+  #dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
   run_epinow2(dat_df = get_region(region.in),
               obs_colname = 'nadmit',
               dat_type = 'hospitalizations',
-              prior_smoothing_window = 2,
+              prior_smoothing_window = 7,
               output_folder = sprintf('%s/%s', outpath, region.in),
               dbug=opt$debug)
 }
+
+write_rds(list(outpath=outpath,
+               dt=dt,
+               today=tooday),
+          path = sprintf('run_params.rds'))

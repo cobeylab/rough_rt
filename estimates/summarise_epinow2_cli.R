@@ -2,7 +2,7 @@
 library(readr)
 ## Source function used to summarise outputs
 source('../code/util.R')
-source('../code/summarise-epinow2-estimates.R')
+source('../code/summarise-epinow2-outputs.R')
 
 ## Read in job information saved from script used to generate estimates
 runpars <- read_rds(sprintf('run_params.rds'))
