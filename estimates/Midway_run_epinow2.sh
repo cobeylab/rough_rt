@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=04:30:00
+#SBATCH --time=24:00:00
 #SBATCH --output=midway/%A_%a.out
 #SBATCH	--error=midway/%A_%a.err
 #SBATCH --array=1-12
