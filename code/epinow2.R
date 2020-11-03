@@ -98,7 +98,7 @@ run_epinow2 <- function(dat_df,  # List of parameters used to generate synthetic
                                       prior_smoothing_window = prior_smoothing_window,
                                       rt_prior = list(mean = 2, sd = 1), 
                                       horizon = 0,
-                                      samples = if(dbug) 10 else 1500, 
+                                      samples = if(dbug) 10 else 2000, 
                                       warmup = if(dbug) 70 else 500, 
                                       cores = 4,
                                       chains = 4, 
