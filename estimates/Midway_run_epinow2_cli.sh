@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=12:00:00
+#SBATCH --time=20:00:00
 #SBATCH --array=1-12
 #SBATCH --ntasks-per-cpu=4
 #SBATCH --mem-per-cpu=1000
@@ -26,8 +26,9 @@ module load R/4.0.0
 cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2929-10-28.csv ../data/cli_admissions_latest.csv 
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=TRUE --outpath=test_epinow2_v1.2.1
+Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=full_epinow2_v1.2.1
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
-##  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
+## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
+## if true, save output .csv files to the outpath specified above
 Rscript summarize_epinow2_cli.R --debug=TRUE
