@@ -1,11 +1,12 @@
 ## Estimate with epinow2
 outpath = '../epinow2_cli_estimates'
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(readr)
 library(cowplot)
-library(EpiEstim)
+#library(EpiEstim)
 library(optparse)
 theme_set(theme_bw())
 source('../code/util.R')
