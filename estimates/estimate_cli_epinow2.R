@@ -13,7 +13,7 @@ source('../code/load_timeseries.R')
 dt <- max(load_cli()$date) ## Use the last date in the timeseries to set the output folder name.
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
-
+tooday = Sys.Date()
 
 ## Read in options from midway
 option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_job_number"),
@@ -64,3 +64,9 @@ for(region.in in regions){
               output_folder = sprintf('%s/%s', outpath, region.in),
               dbug=opt$debug)
 }
+
+
+write_rds(list(outpath=outpath,
+               dt=dt,
+               today=tooday),
+          path = sprintf('run_params.rds'))
