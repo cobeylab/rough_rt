@@ -13,6 +13,8 @@
 ## #SBATCH --qos=covid-19
 ## #SBATCH --account=covid-19 -p broadwl
 
+## Remove local copy of epinow2 from rpath
+rm -r /home/kgostic/R/x86_64-pc-linux-gnu-library/4.0/EpiNow2
 
 ## Set working directory
 cd /project2/cobey/covid-modeling/rt-pipeline-09-2020/estimates/
