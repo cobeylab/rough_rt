@@ -18,6 +18,7 @@ tooday <- Sys.Date()
 ## Read in options from midway
 option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
                    make_option("--debug", type = 'logical', default = TRUE, help='if debug=T, run very short chains'),
+                   make_option("--midway", type = 'logical', default = TRUE, help='T is running on midway'),
                    make_option("--outpath", type = "character", default = NULL, help = 'optional outpath spec for testing. Default is epinow2_cli_estimates/')); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
