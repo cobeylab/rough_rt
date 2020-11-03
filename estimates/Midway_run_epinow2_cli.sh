@@ -1,7 +1,5 @@
 #!/bin/bash
-#SBATCH --time=04:30:00
-#SBATCH --output=midway/o_%A_%a.out
-#SBATCH	--error=midway/e_%A_%a.err
+#SBATCH --time=12:00:00
 #SBATCH --array=1-12
 #SBATCH --ntasks-per-cpu=4
 #SBATCH --mem-per-cpu=1000
@@ -9,7 +7,8 @@
 #SBATCH --mail-user=kgostic
 #SBATCH --partition=cobey
 
-
+## #SBATCH --output=midway/o_%A_%a.out
+## #SBATCH	--error=midway/e_%A_%a.err
 ## #SBATCH --qos=covid-19
 ## #SBATCH --account=covid-19 -p broadwl
 
