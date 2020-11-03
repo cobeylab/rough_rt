@@ -16,10 +16,13 @@ tooday <- Sys.Date()
 
 ## Read in options from midway
 option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
-                   make_option("--debug", type = 'logical', default = TRUE, help='if debug=T, run very short chains')); 
+                   make_option("--debug", type = 'logical', default = TRUE, help='if debug=T, run very short chains'),
+                   make_option("--outpath", type = "character", default = NULL, help = 'optional outpath spec for testing. Default is epinow2_cli_estimates/')); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
-midway = ifelse(length(opt$midway)>0, TRUE, FALSE)
+midway = ifelse(length(opt$midway)>0, TRUE, FALSE) ## Set whether running on midway
+outpath = ifelse(length(opt$outpath)>0, opt$outpath, outpath) ## Set outpath, letting user input override default if specified
+dir_check(outpath)
 if(opt$debug == TRUE){
   tooday='debug'
   outpath = paste0(outpath, '/debug')
