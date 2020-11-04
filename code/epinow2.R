@@ -92,7 +92,7 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                                   prior_smoothing_window = prior_smoothing_window,
                                   rt_prior = list(mean = 2, sd = 1), 
                                   horizon = 0,
-                                  samples = ifelse(dbug, 10, 2000), 
+                                  samples = ifelse(dbug, 10, 2500), 
                                   stan_args = list(warmup = ifelse(dbug, 70, 500), 
                                                    control = list(adapt_delta = 0.9),
                                                    cores = 4),
