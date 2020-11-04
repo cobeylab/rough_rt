@@ -87,7 +87,7 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                                   generation_time = generation_time,
                                   delays = list(reporting_delay = delay,
                                                 incubation_period = incubation_period), 
-                                  method = 'approximate',
+                                  method = 'exact',
                                   CrIs = c(.8, .9, .95),
                                   prior_smoothing_window = prior_smoothing_window,
                                   rt_prior = list(mean = 2, sd = 1), 
