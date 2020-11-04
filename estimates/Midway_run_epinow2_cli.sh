@@ -23,10 +23,10 @@ module load R/4.0.0
 
 ## Get latest data
 ##  !!!!! YOU MUST UPDATE THE DATE IN THIS LINE WITH EACH RUN !!!!!!!!!
-cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2929-10-28.csv ../data/cli_admissions_latest.csv 
+cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2929-11-04.csv ../data/cli_admissions_latest.csv 
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=full_epinow2_v1.2.1
+Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath='../2020-11-04_EpiNow2v1.2.1_cli_approx'
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
 ## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
