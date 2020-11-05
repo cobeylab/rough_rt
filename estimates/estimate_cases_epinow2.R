@@ -1,36 +1,50 @@
 ## Estimate with epinow2
-outpath = '../epinow2_estimates'
+outpath = sprintf('../epinow2_cases_estimates/%s_EpiNow2v1.2.1_cases_exact', Sys.Date())
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(readr)
 library(cowplot)
-library(EpiEstim)
+#library(EpiEstim)
+library(optparse)
 theme_set(theme_bw())
 source('../code/util.R')
-dt <- lubridate::as_date('2020-07-31')
+source('../code/load_timeseries.R')
+dt <- max(load_idph_public_cases_covid_region()$date) ## Use the last date in the timeseries to set the output folder name.
+tooday <- Sys.Date()
+
+
+## Read in options from midway
+option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
+                   make_option("--debug", type = 'logical', default = TRUE, help='if debug=T, run very short chains'),
+                   make_option("--midway", type = 'logical', default = TRUE, help='T is running on midway'),
+                   make_option("--outpath", type = "character", default = outpath, help = 'optional outpath spec for testing. ')); 
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
+midway = ifelse(length(opt$midway)>0, TRUE, FALSE) ## Set whether running on midway
+outpath = opt$outpath
+dir_check(outpath)
+if(opt$debug == TRUE){
+  tooday='debug'
+  outpath = paste0(outpath, '/debug')
+}
 dir_check(outpath)
 dir_check(sprintf('%s/%s', outpath, dt))
 
 
-
 ## Load data --------------------------------------------
-source('../code/load_timeseries.R')
-dat_rr <- load_idph_public_cases_restore_region()
-dat_cr<-load_idph_public_cases_covid_region()
-## Combine the restore region data frame with the covid region data frame, leaving only one iteration of the IL_overall data
-dat <- bind_rows(dat_rr %>% filter(region != 'IL_Overall'), 
-                 dat_cr) %>%
-  mutate(region = factor(region, levels = c(as.character(1:11), unique(dat_rr$region))))
+dat <- load_idph_public_cases_covid_region()
+## Plot data -------
 dat %>%
-  pivot_longer(c(new_cases, smoothed)) %>%
+  pivot_longer(c(cases, smoothed)) %>%
   ggplot()+
   geom_line(aes(x = date, y = value, color = name))+
   facet_wrap(.~region, scales = 'free_y')+
   scale_color_manual("", values = c('black', 'red', 'yellow'))+
   theme(legend.position = 'bottom')+
-  ggtitle('idph cases - public linelist')
-ggsave(sprintf('%s/%s/cases_input.png', outpath, Sys.Date()))
+  ggtitle(sprintf('IDPH public cases up to %s', dt), subtitle = 'UIUC removed')
+ggsave(sprintf('%s/%s_case_input.png', outpath, dt))
 
 ## Estimate rt using epinow2
 library('EpiNow2')
@@ -38,18 +52,33 @@ source('../code/epinow2.R')
 get_region <- function(rr){
   dat %>% filter(region == rr) %>%
     group_by(date) %>%
-    summarise(new_cases = sum(new_cases),
+    summarise(cases = sum(cases),
               smoothed = sum(smoothed))
 }
+
+
 regions = unique(dat$region)
-regions = regions[-c(1:7)]
+if(midway){ ## If running on midway
+  cat('midway is true\n')
+  regions = regions[opt$var] ## Only run for the current slurm array task id
+} ## Else, run for all regions.
 
 for(region.in in regions){
   cat(sprintf('Running for region %s', region.in))
   dir_check(sprintf('%s/%s/%s', outpath, dt, region.in))
   run_epinow2(dat_df = get_region(region.in),
-              obs_colname = 'new_cases',
+              obs_colname = 'cases',
               dat_type = 'cases',
-              prior_smoothing_window = 7,
-              output_folder = sprintf('%s/%s', outpath, region.in))
+              prior_smoothing_window = 1,
+              output_folder = sprintf('%s/%s', outpath, region.in), 
+              dbug = opt$debug)
 }
+
+cat('sampler has run')
+
+write_rds(list(outpath=outpath,
+               dt=dt,
+               today=tooday),
+          path = sprintf('run_params.rds'))
+
+cat('runpars written')

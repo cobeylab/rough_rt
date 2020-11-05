@@ -20,12 +20,14 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
   generation_time$notes = 'ganyani et al'
   ## See EpiNow2::generation_intervals for source info
   
-  case_rep_delay <- list(mean = .1, ## Very rough estimates based on carline 
-                         mean_sd = .5, 
-                         sd = 1,
-                         sd_sd = .5,
+  cd_post <- read_rds('../data/fitted_delays/delay_symptom_to_report_posterior_lognorm.rds') %>%
+    bind_rows(.id = 'par')
+  case_rep_delay <- list(mean = median(cd_post$mu), ## Very rough estimates based on carline 
+                         mean_sd = sd(cd_post$mu), 
+                         sd = median(cd_post$sigma),
+                         sd_sd = sd(cd_post$sigma),
                          max = 30,
-                         notes = 'From rough estimates based on carline data.')
+                         notes = 'Phils fitted estimates')
   
   death_rep_delay <- list(mean = 2.86, ## From Linton et al. Table 2 (J. Clin. Med. 2020, 9, 538; doi:10.3390/jcm9020538)
                           mean_sd = 1.98,   
@@ -87,12 +89,12 @@ run_epinow2 <- function(dat_df,  # Data used in estimation
                                   generation_time = generation_time,
                                   delays = list(reporting_delay = delay,
                                                 incubation_period = incubation_period), 
-                                  method = 'approximate',
+                                  method = 'exact',
                                   CrIs = c(.8, .9, .95),
                                   prior_smoothing_window = prior_smoothing_window,
                                   rt_prior = list(mean = 2, sd = 1), 
                                   horizon = 0,
-                                  samples = ifelse(dbug, 10, 2500), 
+                                  samples = ifelse(dbug, 10, 2000), 
                                   stan_args = list(warmup = ifelse(dbug, 70, 500), 
                                                    control = list(adapt_delta = 0.9),
                                                    cores = 4),
