@@ -76,7 +76,11 @@ for(region.in in regions){
 }
 
 
+cat('sampler has run')
+
 write_rds(list(outpath=outpath,
                dt=dt,
                today=tooday),
           path = sprintf('run_params.rds'))
+
+cat('runpars written')
