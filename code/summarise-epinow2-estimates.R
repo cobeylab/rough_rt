@@ -2,18 +2,14 @@
 summarise_all_estimates <- function(
   path, 
   dt, #Late date in time series
-  tooday, # Date on which analysis is run
-  debug
+  tooday # Date on which analysis is run
 ){
 
   
-  if(debug){
+
     full_outpath =  sprintf('%s/full_outputs.csv', path)
     rt_outpath =    sprintf('%s/Rt_outputs.csv', path)
-  }else{
-    full_outpath =  sprintf('../figs/cli_nadmit_%s/full_outupts_epinow2_%s.csv', tooday, dt)
-    rt_outpath =    sprintf('../figs/cli_nadmit_%s/Rt_outupts_epinow2_%s.csv', tooday, dt)
-  }
+  
   
   
   dirs <- list.files(path)

@@ -5,7 +5,7 @@ library(dplyr)
 library(optparse)
 
 ## Read in options from midway
-option_list = list(make_option("--debug", type = "logical", default = FALSE, help = 'optional outpath spec for testing. Default is epinow2_cli_estimates/')); 
+option_list = list(make_option("--outpath", type = "character", default = NULL, help = 'outpath spec for testing.')); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
 
@@ -16,7 +16,7 @@ source('../code/summarise-epinow2-estimates.R')
 runpars <- read_rds(sprintf('run_params.rds'))
 
 ## Summarise the estimates
-summarise_all_estimates(path = runpars$outpath, dt = runpars$dt, tooday = runpars$today, debug = opt$debug)
+summarise_all_estimates(path = opt$outpath, dt = runpars$dt, tooday = runpars$today)
 
 ## Delete the temporary .rds file
 file.remove(sprintf('run_params.rds'))

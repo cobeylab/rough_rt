@@ -19,6 +19,9 @@ rm -r /home/kgostic/R/x86_64-pc-linux-gnu-library/4.0/EpiNow2
 ## Set working directory
 cd /project2/cobey/covid-modeling/rt-pipeline-09-2020/estimates/
 
+## Set outpath
+OP='../2020-11-04_EpiNow2v1.2.1_cli_exact'
+
 ## Load R
 module load R/4.0.0
 
@@ -28,11 +31,11 @@ cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2020-1
 echo "copied latest data to latest.csv"
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath='../2020-11-04_EpiNow2v1.2.1_cli_exact'
+Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=$OP
 echo "Ran epinow2"
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
 ## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
 ## if true, save output .csv files to the outpath specified above
-Rscript summarize_epinow2.R --debug=TRUE
+Rscript summarize_epinow2.R --outpath=$OP
 

@@ -16,13 +16,16 @@
 ## Set working directory
 cd /project2/cobey/covid-modeling/rt-pipeline-09-2020/estimates/
 
+## Set output path
+OP="../epinow2_cases_estimates/2020-11-05_cases_v1.2.1/"
+
 ## Load R
 module load R/4.0.0
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cases_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath="../epinow2_cases_estimates/2020-11-05_cases_v1.2.1/"
+Rscript estimate_cases_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=$OP
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
 ## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
 ## if true, save output .csv files to the outpath specified above
-Rscript summarize_epinow2.R --debug=TRUE
+Rscript summarize_epinow2.R --outpath=$OP
