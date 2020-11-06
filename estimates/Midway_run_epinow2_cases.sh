@@ -6,7 +6,7 @@
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=kgostic
 #SBATCH --partition=cobey
-#SBATCH --job-name="Rt_cases_v1.2.1"
+#SBATCH --job-name="adj_Rt_cases_v1.2.1"
 
 ## #SBATCH --output=midway/o_%A_%a.out
 ## #SBATCH --error=midway/e_%A_%a.err
@@ -23,7 +23,7 @@ OP="../epinow2_cases_estimates/2020-11-05_cases_v1.2.1/"
 module load R/4.0.0
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cases_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=$OP
+Rscript estimate_cases_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=$OP --adjusted=TRUE
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
 ## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
