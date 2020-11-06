@@ -77,6 +77,8 @@ for(region.in in regions){
 
 cat('sampler has run')
 
+cat('sampler has run')
+
 write_rds(list(outpath=outpath,
                dt=dt,
                today=tooday),

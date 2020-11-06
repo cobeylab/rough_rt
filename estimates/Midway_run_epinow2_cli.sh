@@ -6,6 +6,7 @@
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=kgostic
 #SBATCH --partition=cobey
+#SBATCH --job-name=v1.2.1_exact
 
 ## #SBATCH --output=midway/o_%A_%a.out
 ## #SBATCH	--error=midway/e_%A_%a.err
@@ -23,12 +24,15 @@ module load R/4.0.0
 
 ## Get latest data
 ##  !!!!! YOU MUST UPDATE THE DATE IN THIS LINE WITH EACH RUN !!!!!!!!!
-cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2929-10-28.csv ../data/cli_admissions_latest.csv 
+cp /project2/cobey/covid-modeling/rt-pipeline-09-2020/data/cli_admissions_2020-11-04.csv ../data/cli_admissions_latest.csv 
+echo "copied latest data to latest.csv"
 
 ## Run the Rt estimation pipeline
-Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath=full_epinow2_v1.2.1
+Rscript estimate_cli_epinow2.R --var=$SLURM_ARRAY_TASK_ID --midway=TRUE --debug=FALSE --outpath='../2020-11-04_EpiNow2v1.2.1_cli_exact'
+echo "Ran epinow2"
 
 ## Reformat the outputs, and copy them into a single .csv that lives in:
 ## if debug=FALSE -  ../figs/cli_nadmit_TODAY/, with the corresponding estimates from our EpiEstim pipeline
 ## if true, save output .csv files to the outpath specified above
 Rscript summarize_epinow2.R --debug=TRUE
+
