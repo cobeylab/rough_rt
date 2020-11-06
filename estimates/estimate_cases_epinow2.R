@@ -19,7 +19,8 @@ tooday <- Sys.Date()
 option_list = list(make_option("--var", type = "numeric", default=NULL, help="array_task_number"),
                    make_option("--debug", type = 'logical', default = TRUE, help='if debug=T, run very short chains'),
                    make_option("--midway", type = 'logical', default = TRUE, help='T is running on midway'),
-                   make_option("--outpath", type = "character", default = outpath, help = 'optional outpath spec for testing. ')); 
+                   make_option("--outpath", type = "character", default = outpath, help = 'optional outpath spec for testing. '),
+                   make_option("--adjusted", type = 'logical', default = FALSE, help = 'if TRUE, use estimates adjusted for TPR')); 
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser); # Now you have a list called "opt" with elements opt$var and opt$out
 midway = ifelse(length(opt$midway)>0, TRUE, FALSE) ## Set whether running on midway
@@ -34,7 +35,11 @@ dir_check(sprintf('%s/%s', outpath, dt))
 
 
 ## Load data --------------------------------------------
-dat <- load_idph_public_cases_covid_region()
+if(opt$adjusted){
+  dat <- load_idph_public_adjusted_cases_covid_region()
+}else{
+  dat <- load_idph_public_cases_covid_region()
+}
 ## Plot data -------
 dat %>%
   pivot_longer(c(cases, smoothed)) %>%
