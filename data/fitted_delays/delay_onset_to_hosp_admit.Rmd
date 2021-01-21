@@ -1,0 +1,199 @@
+---
+title: "Fit delay from infection to death"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(rstan)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## Import data from Hong Kong
+
+```{r}
+check_dates <- function(dates){
+  dates[!grepl(x = dates, pattern = '\\d\\d?/\\d\\d?/\\d\\d')]
+}
+is_valid_date <- function(dates){
+  grepl(x = dates, pattern = '\\d\\d?/\\d\\d?/\\d\\d')
+}
+clean_dates_onset <- function(chdate){
+  data_frame(chdate = chdate) %>%
+    separate(chdate, into = c('month', 'day', 'year'), sep = '/') %>%
+    mutate(date = lubridate::as_date(sprintf('20%02i-%02i-%02i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
+    pull(date)
+}
+clean_dates_hosp <- function(chdate){
+  data_frame(chdate = chdate) %>%
+    separate(chdate, into = c('day', 'month', 'year'), sep = '/') %>%
+    mutate(date = lubridate::as_date(sprintf('%04i-%02i-%02i', as.numeric(year), as.numeric(month), as.numeric(day)))) %>%
+    pull(date)
+}
+
+## Delay from onset to hospitalization from HK data
+hkdat <- read_csv('../HK_data/data_24July.csv',
+                              col_types = "iiffffff") %>%
+  setNames(c('id', 'age', 'sex', 'onset', 'hospital', 'isolation', 'discharge', 'death')) %>%
+  select(onset, hospital, age) %>%
+  filter(is_valid_date(onset) & is_valid_date(hospital)) %>%
+  mutate(onset = clean_dates_onset(onset),
+         hospital = clean_dates_hosp(hospital),
+         delay = hospital-onset)
+```
+
+## Plot by delay
+```{r}
+hkdat %>%
+  ggplot() +
+  geom_histogram(aes(x = delay), binwidth = 1) +
+  ggtitle('HK delays onset to hospital')
+```
+## Plot by age
+```{r}
+hkdat %>%
+  mutate(age_bin = cut(age, breaks = seq(0, 100, by = 10), include.lowest = T)) %>%
+  ggplot()+
+  geom_violin(aes(x = age_bin, y = delay, fill = age_bin), draw_quantiles = c(.1, .5, .9))+
+  ylim(c(0,20)) +
+  ggtitle('Delay by age') -> vio
+
+vio
+
+vio +
+    geom_point(aes(x = jitter(as.numeric(age_bin)), y = jitter(as.numeric(delay))), alpha = .5)
+```
+
+## Plot age distribution
+```{r}
+hkdat %>% 
+  group_by(age) %>%
+  summarise(n = n()) %>%
+  ggplot()+
+  geom_bar(aes(x = age, y = n), stat = 'identity')+
+  ggtitle('HK hospital admissions with symptom onset date')
+```
+
+
+
+## Drop negative delays for fitting.
+```{r}
+  get_shape_rate <- function(mean, vv){
+    rate = mean/vv
+    shape = mean*rate
+    # stopifnot(shape/rate == mean)
+    # stopifnot(shape/rate^2 == vv)
+    c(shape, rate)
+  }
+
+## Empirical delay from onset to hosp
+del_onset_to_hosp_hk <- hkdat %>% filter(delay >=0) %>% pull(delay)
+```
+
+```{r}
+## Generate synthetic incubation times
+#del_inf_to_onset <- rgamma(n = length(del_onset_to_hosp_hk), shape = 5.807, scale = 0.948) # From Lauer et al. 2020
+
+## Add a random number from [0, 1) to each observation
+##  This addresses interval censoring and also prevents 0s from messing up the lognormal fits
+del_hosp_to_report <- runif(n = length(del_onset_to_hosp_hk), 0, 1)
+
+delay_vec_hk <- as.numeric(del_onset_to_hosp_hk + del_hosp_to_report)
+```
+
+## Empirical mean
+```{r}
+sprintf('mean delay from onset to hospital admission in hk is %.2f d', mean(delay_vec_hk))
+```
+
+
+## Fit lognormal distribution
+```{r}
+fit_stan <- function(
+  mod = 'fit_gamma.stan',
+  del_vec, # vector of delay for each individual in the data
+  chains = 1, # Number of MCMC chains to run
+  cores = parallel::detectCores(logical = FALSE),
+  ...
+) {
+  library(rstan)
+  
+  model <- stan_model(mod)
+  
+  N <- length(del_vec)
+  model_input_data <- list(
+    N = N,
+    x = del_vec
+  )
+  
+  fit <- sampling(
+    model, model_input_data, chains = chains, cores = cores,
+    ...
+  )
+}
+```
+
+
+```{r}
+fit_stan(mod = '../../code/fit_lognormal.stan', 
+               del_vec = delay_vec_hk, 
+               chains = 4) -> fit_lnormal_hk
+```
+
+
+## Extract lognormal fits
+```{r}
+params_lognormal_hk <- rstan::extract(fit_lnormal_hk)
+params_lognormal_ni <- rstan::extract(fit_lnormal_ni)
+```
+
+## Hong Kong Results
+```{r}
+pairs(fit_lnormal_hk, pars = c("mu", "sigma", "lp__"), las = 1)
+print(fit_lnormal_hk, pars = c('mu', 'sigma'))
+```
+
+## Plot 
+```{r}
+wait <- data.frame(wait = floor(delay_vec_hk)) %>%
+  group_by(wait) %>%
+  summarise(count = n()) %>%
+   mutate(kind = 'hk')
+
+
+post_hk <- mapply(FUN = function(mm, ss) dlnorm(x = wait_df$wait, mm, ss)*length(delay_vec_hk), 
+                         mm = params_lognormal_hk$mu,
+                         ss = params_lognormal_hk$sigma) %>%
+  apply(MARGIN = 1, FUN = function(xx) data.frame(lower = quantile(xx, .025),
+                                                  med = quantile(xx, .5),
+                                                  upper = quantile(xx, .975))) %>%
+  bind_rows() %>%
+  mutate(wait = wait_df$wait)
+
+
+
+bind_rows(list(
+  lognormal = post_hk
+), .id = 'dist') %>%
+  merge(wait, by = 'wait') %>%
+  ggplot()+
+  geom_bar(data = wait, aes(x = wait, y = count), stat = 'identity', alpha = .5)+
+  geom_line(aes(x = wait, y = med, color = dist), lwd = 1) +
+  geom_ribbon(aes(x = wait, ymin = lower, ymax = upper, fill = dist), alpha = .5)+
+  ggtitle('HK: delay from onset to hospital admission', subtitle = sprintf('%.2fd onset to hosp; \nmean=%.2f, var=%.2f\nlognormal mu = %.2f, sigma=%.2f',
+          mean(del_onset_to_hosp_hk), mean(delay_vec_hk), var(delay_vec_hk), median(params_lognormal_hk$mu), median(params_lognormal_hk$sigma)))
+```
+
+## For comparison, onset to hospital admission lognormal from Linton et al. (Table 1 - living) are:
+
+ mean - 3.9d
+ sd - 9.1d
+
+## Save the posterior
+```{r}
+write_rds(params_lognormal_hk, 'delay_onset_to_hosp_admit_posterior.rds')
+```
+
